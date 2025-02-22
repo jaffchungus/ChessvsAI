@@ -3,402 +3,371 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Advanced Chess vs AI</title>
-    <style>    body {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
+    <title>Chess vs AI</title>
+    <style>
+        body {
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
             margin: 0;
-            background: #f0f0f0;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #1a1c2e 0%, #2a2d4c 100%);
+            color: #ffffff;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 2rem;
         }
+
+        .game-container {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 2rem;
+            border-radius: 1rem;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
         #chessboard {
             display: grid;
-            grid-template-columns: repeat(8, 50px);
-            grid-template-rows: repeat(8, 50px);
-            border: 2px solid #333;
+            grid-template-columns: repeat(8, 70px);
+            gap: 0;
+            border: 3px solid rgba(255, 255, 255, 0.1);
+            margin: 20px auto;
+            background: #2c3e50;
+            border-radius: 4px;
+            overflow: hidden;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
         }
+
         .square {
-            width: 50px;
-            height: 50px;
+            width: 70px;
+            height: 70px;
             display: flex;
-            justify-content: center;
             align-items: center;
-            font-size: 30px;
+            justify-content: center;
+            font-size: 48px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            position: relative;
+            font-family: "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif;
         }
-        .light {
-            background: #f0d9b5;
+
+        .light { 
+            background: #ebecd0;
         }
-        .dark {
-            background: #b58863;
+        
+        .dark { 
+            background: #779556;
+        }
+
+        .selected { 
+            background: #baca44 !important;
+        }
+
+        .valid-move { 
+            position: relative;
+        }
+
+        .valid-move::after {
+            content: '';
+            position: absolute;
+            width: 24px;
+            height: 24px;
+            background: rgba(106, 154, 79, 0.8);
+            border-radius: 50%;
+        }
+
+        .check { 
+            background: rgba(220, 53, 69, 0.6) !important;
+        }
+
+        #status {
+            padding: 1rem 1.5rem;
+            font-size: 1.2rem;
+            margin: 1rem 0;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            text-align: center;
+            font-weight: 500;
+            letter-spacing: 0.5px;
+        }
+
+        button {
+            padding: 12px 25px;
+            font-size: 1rem;
+            margin: 10px;
+            background: #5c6bc0;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        button:hover { 
+            background: #3f51b5;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(92, 107, 192, 0.3);
+        }
+
+        .promotion-dialog {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(44, 62, 80, 0.95);
+            padding: 2rem;
+            border-radius: 1rem;
+            display: none;
+            gap: 1rem;
+            z-index: 1000;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+        }
+
+        .promotion-option {
+            font-size: 48px;
+            cursor: pointer;
+            padding: 1rem;
+            border-radius: 8px;
+            transition: all 0.2s ease;
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .promotion-option:hover { 
+            background: rgba(255, 255, 255, 0.1);
+            transform: translateY(-2px);
+        }
+
+        .game-info {
+            text-align: center;
+            margin-bottom: 1rem;
+        }
+
+        .game-info h1 {
+            font-size: 2.5rem;
+            margin: 0 0 0.5rem 0;
+            background: linear-gradient(135deg, #5c6bc0, #3f51b5);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            font-weight: 700;
+        }
+
+        .game-info p {
+            color: rgba(255, 255, 255, 0.7);
+            margin: 0;
+            font-size: 1.1rem;
         }
     </style>
 </head>
 <body>
-    <div id="chessboard">
-        <!-- Row 1 -->
-        <div class="square dark">♜</div>
-        <div class="square light">♞</div>
-        <div class="square dark">♝</div>
-        <div class="square light">♛</div>
-        <div class="square dark">♚</div>
-        <div class="square light">♝</div>
-        <div class="square dark">♞</div>
-        <div class="square light">♜</div>
-        <!-- Row 2 -->
-        <div class="square light">♟</div>
-        <div class="square dark">♟</div>
-        <div class="square light">♟</div>
-        <div class="square dark">♟</div>
-        <div class="square light">♟</div>
-        <div class="square dark">♟</div>
-        <div class="square light">♟</div>
-        <div class="square dark">♟</div>
-        <!-- Row 3 -->
-        <div class="square dark"></div>
-        <div class="square light"></div>
-        <div class="square dark"></div>
-        <div class="square light"></div>
-        <div class="square dark"></div>
-        <div class="square light"></div>
-        <div class="square dark"></div>
-        <div class="square light"></div>
-        <!-- Row 4 -->
-        <div class="square light"></div>
-        <div class="square dark"></div>
-        <div class="square light"></div>
-        <div class="square dark"></div>
-        <div class="square light"></div>
-        <div class="square dark"></div>
-        <div class="square light"></div>
-        <div class="square dark"></div>
-        <!-- Row 5 -->
-        <div class="square dark"></div>
-        <div class="square light"></div>
-        <div class="square dark"></div>
-        <div class="square light"></div>
-        <div class="square dark"></div>
-        <div class="square light"></div>
-        <div class="square dark"></div>
-        <div class="square light"></div>
-        <!-- Row 6 -->
-        <div class="square light"></div>
-        <div class="square dark"></div>
-        <div class="square light"></div>
-        <div class="square dark"></div>
-        <div class="square light"></div>
-        <div class="square dark"></div>
-        <div class="square light"></div>
-        <div class="square dark"></div>
-        <!-- Row 7 -->
-        <div class="square dark">♙</div>
-        <div class="square light">♙</div>
-        <div class="square dark">♙</div>
-        <div class="square light">♙</div>
-        <div class="square dark">♙</div>
-        <div class="square light">♙</div>
-        <div class="square dark">♙</div>
-        <div class="square light">♙</div>
-        <!-- Row 8 -->
-        <div class="square light">♖</div>
-        <div class="square dark">♘</div>
-        <div class="square light">♗</div>
-        <div class="square dark">♕</div>
-        <div class="square light">♔</div>
-        <div class="square dark">♗</div>
-        <div class="square light">♘</div>
-        <div class="square dark">♖</div>
-    </div>
+    <div class="game-container">
         <div class="game-info">
-            <div class="status-panel">
-                <h2 class="status-title">Game Status</h2>
-                <div id="game-status"></div>
-                <div class="controls">
-                    <button onclick="newGame()">New Game</button>
-                    <button onclick="toggleOrientation()">Flip Board</button>
-                </div>
-            </div>
-            <div class="ai-settings">
-                <h3>AI Difficulty: <span id="difficulty-value">15</span></h3>
-                <input type="range" min="0" max="20" value="15" class="difficulty-slider" id="difficulty">
-            </div>
-            <div class="move-history">
-                <h3>Move History</h3>
-                <div id="move-list"></div>
-            </div>
-            <div class="captured-pieces">
-                <h3>Captured Pieces</h3>
-                <div id="captured-white"></div>
-                <div id="captured-black"></div>
-            </div>
+            <h1>Chess vs AI</h1>
+            <p>Play against Stockfish AI - Skill Level 15</p>
         </div>
-    </div>
-
-    <div class="promotion-dialog" id="promotion-dialog">
-        <div class="promotion-option" data-piece="q">♕</div>
-        <div class="promotion-option" data-piece="r">♖</div>
-        <div class="promotion-option" data-piece="b">♗</div>
-        <div class="promotion-option" data-piece="n">♘</div>
+        <div id="status">White's turn</div>
+        <div id="chessboard"></div>
+        <button onclick="newGame()">New Game</button>
+        <div class="promotion-dialog" id="promotion-dialog">
+            <div class="promotion-option" data-piece="q">♕</div>
+            <div class="promotion-option" data-piece="r">♖</div>
+            <div class="promotion-option" data-piece="b">♗</div>
+            <div class="promotion-option" data-piece="n">♘</div>
+        </div>
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
     <script>
-        const chess = new Chess();
-        const boardElement = document.getElementById('chessboard');
-        const statusElement = document.getElementById('game-status');
-        const moveListElement = document.getElementById('move-list');
-        const capturedWhiteElement = document.getElementById('captured-white');
-        const capturedBlackElement = document.getElementById('captured-black');
+        const game = new Chess();
+        const board = document.getElementById('chessboard');
+        const status = document.getElementById('status');
         const promotionDialog = document.getElementById('promotion-dialog');
-        const difficultySlider = document.getElementById('difficulty');
-        const difficultyValue = document.getElementById('difficulty-value');
-
         let selectedSquare = null;
         let validMoves = [];
-        let boardOrientation = 'white';
-        let aiWorker = null;
         let pendingPromotion = null;
-        let capturedPieces = { w: [], b: [] };
+        let isAIThinking = false;
+        const stockfish = new Worker('https://unpkg.com/stockfish-js@0.12.0/stockfish.js');
 
-        // Initialize Stockfish AI worker
-        function initAI() {
-            if (aiWorker) aiWorker.terminate();
-            aiWorker = new Worker('https://unpkg.com/stockfish-js@0.12.0/stockfish.js');
-            
-            aiWorker.onmessage = (event) => {
-                const message = event.data;
-                if (message.startsWith('bestmove')) {
-                    const bestMove = message.split(' ')[1];
-                    if (bestMove && bestMove !== 'null') {
-                        makeMove(bestMove);
-                    }
-                }
-            };
-
-            aiWorker.postMessage('uci');
-            aiWorker.postMessage('setoption name Skill Level value ' + difficultySlider.value);
-        }
-
-        // Initialize game board
-        function initBoard() {
-            boardElement.innerHTML = '';
-            for (let rank = 0; rank < 8; rank++) {
-                for (let file = 0; file < 8; file++) {
+        // Initialize board with all pieces
+        function createBoard() {
+            board.innerHTML = '';
+            for (let row = 0; row < 8; row++) {
+                for (let col = 0; col < 8; col++) {
                     const square = document.createElement('div');
-                    const isLight = (rank + file) % 2 === 0;
+                    const isLight = (row + col) % 2 === 0;
                     square.className = `square ${isLight ? 'light' : 'dark'}`;
-                    square.dataset.position = toAlgebraic(rank, file);
-                    
-                    // Add coordinates
-                    if (file === 0) {
-                        const rankCoord = document.createElement('div');
-                        rankCoord.className = 'coordinates rank-coordinates';
-                        rankCoord.textContent = 8 - rank;
-                        square.appendChild(rankCoord);
-                    }
-                    if (rank === 7) {
-                        const fileCoord = document.createElement('div');
-                        fileCoord.className = 'coordinates file-coordinates';
-                        fileCoord.textContent = String.fromCharCode(97 + file);
-                        square.appendChild(fileCoord);
-                    }
-
+                    square.dataset.pos = `${String.fromCharCode(97 + col)}${8 - row}`;
                     square.addEventListener('click', handleSquareClick);
-                    boardElement.appendChild(square);
+                    board.appendChild(square);
                 }
             }
             updateBoard();
         }
 
-        // Update board state
+        // Update board state with all pieces
         function updateBoard() {
-            const squares = boardElement.querySelectorAll('.square');
-            squares.forEach(square => {
-                const position = square.dataset.position;
-                const piece = chess.get(position);
-                square.innerHTML = piece ? getPieceSymbol(piece) : '';
-                square.className = square.className.replace(/ selected|valid-move|in-check/g, '');
+            document.querySelectorAll('.square').forEach(square => {
+                const pos = square.dataset.pos;
+                const piece = game.get(pos);
+                square.textContent = piece ? getPieceSymbol(piece) : '';
                 
-                // Restore base color
-                const [rank, file] = fromAlgebraic(position);
+                // Reset styles
+                const [rank, file] = fromAlgebraic(pos);
                 const isLight = (rank + file) % 2 === 0;
                 square.className = `square ${isLight ? 'light' : 'dark'}`;
+                square.classList.remove('selected', 'valid-move', 'check');
 
-                // Restore coordinates
-                if (file === 0) {
-                    const rankCoord = document.createElement('div');
-                    rankCoord.className = 'coordinates rank-coordinates';
-                    rankCoord.textContent = 8 - rank;
-                    square.appendChild(rankCoord);
-                }
-                if (rank === 7) {
-                    const fileCoord = document.createElement('div');
-                    fileCoord.className = 'coordinates file-coordinates';
-                    fileCoord.textContent = String.fromCharCode(97 + file);
-                    square.appendChild(fileCoord);
+                // Highlight check
+                if (game.inCheck() && piece?.type === 'k' && piece.color === game.turn()) {
+                    square.classList.add('check');
                 }
             });
-
-            // Highlight check
-            if (chess.inCheck()) {
-                const kingSquare = chess.board().flat().find(sq => sq && sq.type === 'k' && sq.color === chess.turn());
-                if (kingSquare) {
-                    const kingPos = toAlgebraic(kingSquare.square);
-                    document.querySelector(`[data-position="${kingPos}"]`).classList.add('in-check');
-                }
-            }
-
             updateStatus();
-            updateMoveHistory();
-            updateCapturedPieces();
         }
 
-        // Handle square clicks
-        function handleSquareClick(event) {
-            if (chess.isGameOver() || chess.turn() !== 'w') return;
+        // Handle piece movement
+        function handleSquareClick(e) {
+            if (game.game_over() || isAIThinking) return;
+            
+            const pos = e.target.dataset.pos;
+            const piece = game.get(pos);
 
-            const position = event.target.closest('.square').dataset.position;
-            const piece = chess.get(position);
-
-            if (selectedSquare === position) {
+            if (selectedSquare === pos) {
                 clearSelection();
                 return;
             }
 
+            // Select piece
+            if (piece?.color === game.turn() && game.turn() === 'w') {
+                selectedSquare = pos;
+                validMoves = game.moves({ square: pos, verbose: true });
+                highlightMoves();
+                return;
+            }
+
+            // Make move
             if (selectedSquare) {
-                const move = tryMove(selectedSquare, position);
+                const move = validMoves.find(m => m.to === pos);
                 if (move) {
-                    if (move.flags.includes('p') && move.piece === 'p') {
-                        showPromotionDialog(position, move.color);
+                    if (move.flags.includes('p')) {
+                        showPromotionDialog(selectedSquare, pos);
                     } else {
                         completeMove(move);
                     }
                 }
-            } else if (piece && piece.color === 'w') {
-                selectSquare(position);
             }
         }
 
-        function selectSquare(position) {
-            selectedSquare = position;
-            validMoves = chess.moves({ square: position, verbose: true });
-            highlightValidMoves();
-        }
-
-        function highlightValidMoves() {
-            validMoves.forEach(move => {
-                const square = document.querySelector(`[data-position="${move.to}"]`);
-                if (square) square.classList.add('valid-move');
-            });
-            document.querySelector(`[data-position="${selectedSquare}"]`).classList.add('selected');
-        }
-
-        function tryMove(from, to) {
+        // Complete move with promotion
+        function completeMove(move, promotionPiece = 'q') {
             try {
-                return chess.move({ from, to, promotion: 'q' });
-            } catch {
-                return null;
-            }
-        }
-
-        function completeMove(move) {
-            capturedPieces[move.color === 'w' ? 'b' : 'w'].push(...(move.captured || []));
-            clearSelection();
-            updateBoard();
-            if (!chess.isGameOver()) {
-                aiWorker.postMessage(`position fen ${chess.fen()}`);
-                aiWorker.postMessage(`go depth ${difficultySlider.value}`);
-            }
-        }
-
-        function showPromotionDialog(position, color) {
-            promotionDialog.style.display = 'flex';
-            pendingPromotion = { from: selectedSquare, to: position, color };
-        }
-
-        function handlePromotion(piece) {
-            const move = chess.move({
-                from: pendingPromotion.from,
-                to: pendingPromotion.to,
-                promotion: piece
-            });
-            promotionDialog.style.display = 'none';
-            pendingPromotion = null;
-            completeMove(move);
-        }
-
-        function makeMove(moveString) {
-            const move = chess.move(moveString);
-            if (move) {
-                capturedPieces[move.color === 'w' ? 'b' : 'w'].push(...(move.captured || []));
+                game.move({ ...move, promotion: promotionPiece });
+                clearSelection();
                 updateBoard();
+                
+                if (!game.game_over()) {
+                    if (game.turn() === 'b') {
+                        isAIThinking = true;
+                        status.textContent = "AI is thinking...";
+                        setTimeout(() => {
+                            stockfish.postMessage(`position fen ${game.fen()}`);
+                            stockfish.postMessage('go depth 15');
+                        }, 500);
+                    }
+                }
+            } catch (e) {
+                console.error('Invalid move:', e);
             }
         }
 
-        function updateStatus() {
-            let status = '';
-            if (chess.isCheckmate()) {
-                status = `Checkmate! ${chess.turn() === 'w' ? 'Black' : 'White'} wins!`;
-            } else if (chess.isDraw()) {
-                status = 'Draw!';
-            } else if (chess.isStalemate()) {
-                status = 'Stalemate!';
-            } else if (chess.inCheck()) {
-                status = `Check! ${chess.turn() === 'w' ? 'White' : 'Black'}'s turn`;
-            } else {
-                status = `${chess.turn() === 'w' ? 'White' : 'Black'}'s turn`;
-            }
-            statusElement.textContent = status;
-        }
-
-        function updateMoveHistory() {
-            moveListElement.innerHTML = chess.history({ verbose: true }).map((move, index) => `
-                <div class="history-item">
-                    ${Math.floor(index/2) + 1}. ${index % 2 === 0 ? '' : move.san}
-                </div>
-            `).join('');
-        }
-
-        function updateCapturedPieces() {
-            capturedWhiteElement.innerHTML = capturedPieces.b.map(p => getPieceSymbol({ type: p, color: 'b' })).join('');
-            capturedBlackElement.innerHTML = capturedPieces.w.map(p => getPieceSymbol({ type: p, color: 'w' })).join('');
-        }
-
+        // Clear selection and highlights
         function clearSelection() {
             selectedSquare = null;
             validMoves = [];
-            boardElement.querySelectorAll('.square').forEach(sq => {
-                sq.classList.remove('selected', 'valid-move');
+            document.querySelectorAll('.square').forEach(square => {
+                square.classList.remove('selected', 'valid-move');
             });
         }
 
+        // Stockfish AI handler
+        stockfish.onmessage = (event) => {
+            const message = event.data;
+            if (message.startsWith('bestmove')) {
+                const bestMove = message.split(' ')[1];
+                if (bestMove && bestMove !== 'null') {
+                    setTimeout(() => {
+                        game.move(bestMove);
+                        updateBoard();
+                        isAIThinking = false;
+                    }, 500);
+                }
+            }
+        };
+
+        // Promotion handling
+        function showPromotionDialog(from, to) {
+            pendingPromotion = { from, to };
+            promotionDialog.style.display = 'flex';
+        }
+
+        document.querySelectorAll('.promotion-option').forEach(option => {
+            option.addEventListener('click', () => {
+                const piece = option.dataset.piece;
+                promotionDialog.style.display = 'none';
+                completeMove({
+                    from: pendingPromotion.from,
+                    to: pendingPromotion.to,
+                    color: game.turn()
+                }, piece);
+            });
+        });
+
+        // Highlight valid moves
+        function highlightMoves() {
+            document.querySelectorAll('.square').forEach(square => {
+                square.classList.remove('selected', 'valid-move');
+                if (square.dataset.pos === selectedSquare) {
+                    square.classList.add('selected');
+                }
+                if (validMoves.some(m => m.to === square.dataset.pos)) {
+                    square.classList.add('valid-move');
+                }
+            });
+        }
+
+        // Update game status
+        function updateStatus() {
+            let statusText = '';
+            if (game.inCheckmate()) {
+                statusText = `Checkmate! ${game.turn() === 'w' ? 'Black' : 'White'} wins!`;
+            } else if (game.inDraw()) {
+                statusText = 'Draw!';
+            } else if (game.inCheck()) {
+                statusText = `Check! ${game.turn() === 'w' ? 'White' : 'Black'}'s turn`;
+            } else if (isAIThinking) {
+                statusText = "AI is thinking...";
+            } else {
+                statusText = `${game.turn() === 'w' ? 'White' : 'Black'}'s turn`;
+            }
+            status.textContent = statusText;
+        }
+
+        // New game
         function newGame() {
-            chess.reset();
-            capturedPieces = { w: [], b: [] };
-            clearSelection();
-            initAI();
-            updateBoard();
+            game.reset();
+            selectedSquare = null;
+            validMoves = [];
+            isAIThinking = false;
+            promotionDialog.style.display = 'none';
+            createBoard();
+            stockfish.postMessage('ucinewgame');
         }
 
-        function toggleOrientation() {
-            boardOrientation = boardOrientation === 'white' ? 'black' : 'white';
-            boardElement.style.transform = boardOrientation === 'black' ? 'rotate(180deg)' : 'none';
-            document.querySelectorAll('.square').forEach(sq => {
-                sq.style.transform = boardOrientation === 'black' ? 'rotate(180deg)' : 'none';
-            });
-            updateBoard();
-        }
-
-        function toAlgebraic(rank, file) {
-            return String.fromCharCode(97 + file) + (8 - rank);
-        }
-
-        function fromAlgebraic(position) {
-            const file = position.charCodeAt(0) - 97;
-            const rank = 8 - parseInt(position[1]);
-            return [rank, file];
-        }
-
+        // Get piece symbols
         function getPieceSymbol(piece) {
             const symbols = {
                 'p': '♟', 'r': '♜', 'n': '♞', 'b': '♝', 'q': '♛', 'k': '♚',
@@ -407,20 +376,17 @@
             return symbols[piece.type.toUpperCase()];
         }
 
-        // Event listeners
-        document.querySelectorAll('.promotion-option').forEach(option => {
-            option.addEventListener('click', () => handlePromotion(option.dataset.piece));
-        });
+        // Convert algebraic notation to coordinates
+        function fromAlgebraic(pos) {
+            const file = pos.charCodeAt(0) - 97;
+            const rank = 8 - parseInt(pos[1]);
+            return [rank, file];
+        }
 
-        difficultySlider.addEventListener('input', () => {
-            difficultyValue.textContent = difficultySlider.value;
-            aiWorker.postMessage(`setoption name Skill Level value ${difficultySlider.value}`);
-        });
-
-        // Initial setup
-        initAI();
-        initBoard();
-        newGame();
+        // Initialize game
+        createBoard();
+        stockfish.postMessage('uci');
+        stockfish.postMessage('setoption name Skill Level value 15');
     </script>
 </body>
 </html>
