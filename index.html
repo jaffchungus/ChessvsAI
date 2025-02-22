@@ -5,60 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Chess vs AI</title>
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            margin: 0;
-            background: #f0f0f0;
-        }
-        #game-container {
-            text-align: center;
-            background: #fff;
-            padding: 20px;
-            border-radius: 10px;
-            box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
-        }
-        #chessboard {
-            display: grid;
-            grid-template-columns: repeat(8, 60px);
-            grid-template-rows: repeat(8, 60px);
-            border: 2px solid #333;
-            margin: 20px auto;
-        }
-        .square {
-            width: 60px;
-            height: 60px;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            font-size: 40px;
-            cursor: pointer;
-        }
-        .light {
-            background: #f0d9b5;
-        }
-        .dark {
-            background: #b58863;
-        }
-        .selected {
-            background: #ffff99 !important;
-        }
-        .valid-move {
-            background: #99ff99 !important;
-        }
-        #status {
-            font-size: 18px;
-            margin-top: 10px;
-        }
-        button {
-            padding: 10px 20px;
-            font-size: 16px;
-            margin-top: 10px;
-            cursor: pointer;
-        }
+        /* ... (keep existing styles unchanged) ... */
     </style>
 </head>
 <body>
@@ -70,19 +17,22 @@
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
-    <script src="https://unpkg.com/stockfish@15.1.0/stockfish.js"></script>
     <script>
         const boardElement = document.getElementById('chessboard');
         const statusElement = document.getElementById('status');
         const chess = new Chess();
-        const stockfish = new Worker('https://unpkg.com/stockfish@15.1.0/stockfish.js');
+        const stockfish = new Worker('https://unpkg.com/stockfish-js@0.12.0/stockfish.js');
         let selectedSquare = null;
         let validMoves = [];
+        let aiThinking = false;
 
-        // Set AI difficulty (skill level 0-20, 20 being the strongest)
-        const aiSkillLevel = 10; // Adjust between 0 and 20
+        // Set AI difficulty (skill level 0-20)
+        const aiSkillLevel = 15;
 
-        // Initialize board
+        // Initialize Stockfish
+        stockfish.postMessage('uci');
+        stockfish.postMessage(`setoption name Skill Level value ${aiSkillLevel}`);
+
         function initializeBoard() {
             boardElement.innerHTML = '';
             const board = chess.board();
@@ -90,20 +40,19 @@
                 for (let col = 0; col < 8; col++) {
                     const square = document.createElement('div');
                     square.className = `square ${(row + col) % 2 === 0 ? 'light' : 'dark'}`;
-                    square.dataset.row = row;
-                    square.dataset.col = col;
+                    square.dataset.position = toAlgebraic(row, col);
                     const piece = board[row][col];
                     if (piece) {
-                        square.innerHTML = getPieceSymbol(piece);
+                        square.textContent = getPieceSymbol(piece);
                     }
-                    square.onclick = () => handleSquareClick(row, col);
+                    square.addEventListener('click', () => handleSquareClick(square.dataset.position));
                     boardElement.appendChild(square);
                 }
             }
+            highlightValidMoves();
             updateStatus();
         }
 
-        // Get piece symbol
         function getPieceSymbol(piece) {
             const symbols = {
                 'p': '♟', 'r': '♜', 'n': '♞', 'b': '♝', 'q': '♛', 'k': '♚',
@@ -112,102 +61,109 @@
             return symbols[piece.type.toUpperCase()];
         }
 
-        // Handle square click
-        function handleSquareClick(row, col) {
-            if (chess.turn() !== 'w') return; // Only allow moves on White's turn
+        function handleSquareClick(position) {
+            if (aiThinking || chess.game_over()) return;
 
-            const square = chess.SQUARES[toAlgebraic(row, col)];
-            if (selectedSquare) {
-                const move = chess.move({ from: selectedSquare, to: square, promotion: 'q' });
-                if (move) {
-                    initializeBoard();
-                    if (!chess.game_over()) {
-                        setTimeout(aiMove, 500);
-                    }
-                } else {
+            // Human player's turn (White)
+            if (chess.turn() === 'w') {
+                if (selectedSquare === position) {
                     clearSelection();
-                    selectSquare(row, col);
+                    return;
+                }
+
+                if (selectedSquare) {
+                    tryMove(selectedSquare, position);
+                } else {
+                    selectSquare(position);
+                }
+            }
+        }
+
+        function selectSquare(position) {
+            const moves = chess.moves({ square: position, verbose: true });
+            if (moves.length > 0 && chess.get(position).color === 'w') {
+                selectedSquare = position;
+                validMoves = moves.map(m => m.to);
+                highlightValidMoves();
+            }
+        }
+
+        function tryMove(from, to) {
+            const move = chess.move({ from, to, promotion: 'q' });
+            if (move) {
+                clearSelection();
+                initializeBoard();
+                if (!chess.game_over()) {
+                    aiThinking = true;
+                    requestAiMove();
                 }
             } else {
-                selectSquare(row, col);
+                clearSelection();
+                selectSquare(to);
             }
         }
 
-        // Select square
-        function selectSquare(row, col) {
-            const square = toAlgebraic(row, col);
-            const piece = chess.get(square);
-            if (piece && piece.color === 'w') {
-                selectedSquare = square;
-                validMoves = chess.moves({ square, verbose: true }).map(m => m.to);
-                highlightSquares();
+        function requestAiMove() {
+            stockfish.postMessage(`position fen ${chess.fen()}`);
+            stockfish.postMessage('go depth 10');
+        }
+
+        stockfish.onmessage = (event) => {
+            const message = event.data;
+            if (message.startsWith('bestmove')) {
+                const bestMove = message.split(' ')[1];
+                if (bestMove && bestMove !== 'null') {
+                    chess.move(bestMove);
+                    initializeBoard();
+                    aiThinking = false;
+                }
             }
-        }
+        };
 
-        // Clear selection
-        function clearSelection() {
-            selectedSquare = null;
-            validMoves = [];
-            initializeBoard();
-        }
-
-        // Highlight selected and valid move squares
-        function highlightSquares() {
-            const squares = document.querySelectorAll('.square');
-            squares.forEach(square => {
-                const row = parseInt(square.dataset.row);
-                const col = parseInt(square.dataset.col);
-                const alg = toAlgebraic(row, col);
-                if (alg === selectedSquare) {
+        function highlightValidMoves() {
+            document.querySelectorAll('.square').forEach(square => {
+                square.classList.remove('selected', 'valid-move');
+                if (square.dataset.position === selectedSquare) {
                     square.classList.add('selected');
-                } else if (validMoves.includes(alg)) {
+                }
+                if (validMoves.includes(square.dataset.position)) {
                     square.classList.add('valid-move');
                 }
             });
         }
 
-        // AI Move
-        function aiMove() {
-            stockfish.postMessage(`position fen ${chess.fen()}`);
-            stockfish.postMessage(`go depth ${aiSkillLevel}`);
-            stockfish.onmessage = function(event) {
-                const message = event.data;
-                if (message.startsWith('bestmove')) {
-                    const bestMove = message.split(' ')[1];
-                    chess.move(bestMove);
-                    initializeBoard();
-                }
-            };
-        }
-
-        // Update game status
         function updateStatus() {
             let status = '';
             if (chess.in_checkmate()) {
-                status = 'Checkmate! ' + (chess.turn() === 'w' ? 'Black' : 'White') + ' wins!';
+                status = `Checkmate! ${chess.turn() === 'w' ? 'Black' : 'White'} wins!`;
             } else if (chess.in_draw()) {
                 status = 'Draw!';
             } else if (chess.in_check()) {
-                status = 'Check! ' + (chess.turn() === 'w' ? 'White' : 'Black') + '\'s turn';
+                status = `Check! ${chess.turn() === 'w' ? 'White' : 'Black'}'s turn`;
             } else {
-                status = (chess.turn() === 'w' ? 'White' : 'Black') + '\'s turn';
+                status = `${chess.turn() === 'w' ? 'White' : 'Black'}'s turn`;
             }
             statusElement.textContent = status;
         }
 
-        // Convert row/col to algebraic notation
         function toAlgebraic(row, col) {
             const files = 'abcdefgh';
             return files[col] + (8 - row);
         }
 
-        // Restart game
+        function clearSelection() {
+            selectedSquare = null;
+            validMoves = [];
+            highlightValidMoves();
+        }
+
         function restartGame() {
             chess.reset();
+            aiThinking = false;
+            clearSelection();
             initializeBoard();
         }
 
-        // Initialize game
         initializeBoard();
     </script>
 </body>
