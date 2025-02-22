@@ -203,6 +203,48 @@
             gap: 1rem;
             justify-content: center;
         }
+
+         .game-container { 
+            display: flex;
+            gap: 2rem;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .side-panel {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 1rem;
+            border-radius: 1rem;
+            min-width: 200px;
+        }
+
+        .move-history {
+            max-height: 300px;
+            overflow-y: auto;
+            margin-top: 1rem;
+        }
+
+        .move {
+            padding: 0.5rem;
+            background: rgba(255, 255, 255, 0.1);
+            margin: 0.2rem 0;
+            border-radius: 4px;
+        }
+
+        .captured-pieces {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin-top: 1rem;
+            font-size: 24px;
+        }
+
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1rem;
+            justify-content: center;
+        }
     </style>
 </head>
 <body>
@@ -254,7 +296,7 @@
         let pendingPromotion = null;
         let isAIThinking = false;
         let showNotation = false;
-        let moveStack = [];
+        let moveStack = [game.fen()]; // Initialize with starting position
         const stockfish = new Worker('https://unpkg.com/stockfish-js@0.12.0/stockfish.js');
 
         function createBoard() {
@@ -273,7 +315,6 @@
         }
 
         function updateBoard() {
-            const fen = game.fen().split(' ')[0];
             document.querySelectorAll('.square').forEach(square => {
                 const pos = square.dataset.pos;
                 const piece = game.get(pos);
@@ -432,42 +473,52 @@
             return [rank, file];
         }
 
-        // New Features
         function updateMoveHistory() {
             moveHistory.innerHTML = '';
             const history = game.history({ verbose: true });
             history.forEach((move, index) => {
                 const moveDiv = document.createElement('div');
                 moveDiv.className = 'move';
-                moveDiv.textContent = `${Math.floor(index/2) + 1}. ${move.color === 'w' ? move.san : ''} ${move.color === 'b' ? move.san : ''}`;
+                moveDiv.textContent = `${Math.floor(index/2) + 1}. ${move.color === 'w' ? move.san : ''} ${move.color === 'b' ? move.san : ''}`.trim();
                 moveHistory.appendChild(moveDiv);
             });
         }
 
         function updateCapturedPieces() {
             const position = game.fen().split(' ')[0];
-            const pieceCount = {
-                w: { p: 8, r: 2, n: 2, b: 2, q: 1 },
-                b: { p: 8, r: 2, n: 2, b: 2, q: 1 }
+            const initialCount = {
+                w: { p: 8, r: 2, n: 2, b: 2, q: 1, k: 1 },
+                b: { p: 8, r: 2, n: 2, b: 2, q: 1, k: 1 }
             };
-            
+            const currentCount = { w: {}, b: {} };
+
+            // Count current pieces on board
             position.split('/').forEach(row => {
                 row.split('').forEach(char => {
-                    if (/[prnbq]/.test(char)) pieceCount.b[char]--;
-                    if (/[PRNBQ]/.test(char)) pieceCount.w[char.toLowerCase()]--;
+                    if (/[prnbqk]/.test(char)) {
+                        currentCount.b[char] = (currentCount.b[char] || 0) + 1;
+                    } else if (/[PRNBQK]/.test(char)) {
+                        currentCount.w[char.toLowerCase()] = (currentCount.w[char.toLowerCase()] || 0) + 1;
+                    } else if (!isNaN(char)) {
+                        for (let i = 0; i < parseInt(char); i++) {
+                            currentCount.b['p'] = (currentCount.b['p'] || 0) + 1; // Default to pawns for empty spaces in FEN
+                        }
+                    }
                 });
             });
 
+            // Calculate captured pieces
             whiteCaptured.innerHTML = '';
             blackCaptured.innerHTML = '';
             ['p', 'r', 'n', 'b', 'q'].forEach(type => {
-                const whiteDiff =  pieceCount.b[type];
-                const blackDiff =  pieceCount.w[type];
-                if (whiteDiff > 0) {
-                    whiteCaptured.innerHTML += getPieceSymbol({color: 'b', type}).repeat(whiteDiff);
+                const whiteCapturedCount = initialCount.b[type] - (currentCount.b[type] || 0);
+                const blackCapturedCount = initialCount.w[type] - (currentCount.w[type] || 0);
+                
+                if (whiteCapturedCount > 0) {
+                    whiteCaptured.innerHTML += getPieceSymbol({color: 'b', type}).repeat(whiteCapturedCount);
                 }
-                if (blackDiff > 0) {
-                    blackCaptured.innerHTML += getPieceSymbol({color: 'w', type}).repeat(blackDiff);
+                if (blackCapturedCount > 0) {
+                    blackCaptured.innerHTML += getPieceSymbol({color: 'w', type}).repeat(blackCapturedCount);
                 }
             });
         }
@@ -477,6 +528,11 @@
                 moveStack.pop();
                 game.load(moveStack[moveStack.length - 1]);
                 updateBoard();
+                if (game.turn() === 'b') {
+                    moveStack.pop(); // Remove AI's move if undoing player's move
+                    game.load(moveStack[moveStack.length - 1]);
+                    updateBoard();
+                }
             }
         }
 
