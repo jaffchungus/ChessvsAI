@@ -161,22 +161,82 @@
             margin: 0;
             font-size: 1.1rem;
         }
+
+                .game-container { 
+            display: flex;
+            gap: 2rem;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .side-panel {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 1rem;
+            border-radius: 1rem;
+            min-width: 200px;
+        }
+
+        .move-history {
+            max-height: 300px;
+            overflow-y: auto;
+            margin-top: 1rem;
+        }
+
+        .move {
+            padding: 0.5rem;
+            background: rgba(255, 255, 255, 0.1);
+            margin: 0.2rem 0;
+            border-radius: 4px;
+        }
+
+        .captured-pieces {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin-top: 1rem;
+            font-size: 24px;
+        }
+
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1rem;
+            justify-content: center;
+        }
     </style>
 </head>
 <body>
     <div class="game-container">
-        <div class="game-info">
-            <h1>Chess vs AI</h1>
-            <p>Play against Stockfish AI - Skill Level 15</p>
+        <div>
+            <div class="game-info">
+                <h1>Chess vs AI</h1>
+                <p>Play against Stockfish AI - Skill Level 15</p>
+            </div>
+            <div id="status">White's turn</div>
+            <div id="chessboard"></div>
+            <div class="controls">
+                <button onclick="newGame()">New Game</button>
+                <button onclick="undoMove()">Undo Move</button>
+                <button onclick="toggleNotation()">Toggle Notation</button>
+            </div>
+            <div class="promotion-dialog" id="promotion-dialog">
+                <div class="promotion-option" data-piece="q">♕</div>
+                <div class="promotion-option" data-piece="r">♖</div>
+                <div class="promotion-option" data-piece="b">♗</div>
+                <div class="promotion-option" data-piece="n">♘</div>
+            </div>
         </div>
-        <div id="status">White's turn</div>
-        <div id="chessboard"></div>
-        <button onclick="newGame()">New Game</button>
-        <div class="promotion-dialog" id="promotion-dialog">
-            <div class="promotion-option" data-piece="q">♕</div>
-            <div class="promotion-option" data-piece="r">♖</div>
-            <div class="promotion-option" data-piece="b">♗</div>
-            <div class="promotion-option" data-piece="n">♘</div>
+        <div class="side-panel">
+            <h2>Game Info</h2>
+            <div>
+                <strong>Captured by White:</strong>
+                <div id="white-captured" class="captured-pieces"></div>
+            </div>
+            <div>
+                <strong>Captured by Black:</strong>
+                <div id="black-captured" class="captured-pieces"></div>
+            </div>
+            <div class="move-history" id="move-history"></div>
         </div>
     </div>
 
@@ -186,13 +246,17 @@
         const board = document.getElementById('chessboard');
         const status = document.getElementById('status');
         const promotionDialog = document.getElementById('promotion-dialog');
+        const moveHistory = document.getElementById('move-history');
+        const whiteCaptured = document.getElementById('white-captured');
+        const blackCaptured = document.getElementById('black-captured');
         let selectedSquare = null;
         let validMoves = [];
         let pendingPromotion = null;
         let isAIThinking = false;
+        let showNotation = false;
+        let moveStack = [];
         const stockfish = new Worker('https://unpkg.com/stockfish-js@0.12.0/stockfish.js');
 
-        // Initialize board with all pieces
         function createBoard() {
             board.innerHTML = '';
             for (let row = 0; row < 8; row++) {
@@ -208,31 +272,30 @@
             updateBoard();
         }
 
-        // Update board state with all pieces
         function updateBoard() {
+            const fen = game.fen().split(' ')[0];
             document.querySelectorAll('.square').forEach(square => {
                 const pos = square.dataset.pos;
                 const piece = game.get(pos);
                 square.textContent = piece ? getPieceSymbol(piece) : '';
-                
-                // Reset styles
+                if (showNotation) square.textContent += ` (${pos})`;
+
                 const [rank, file] = fromAlgebraic(pos);
                 const isLight = (rank + file) % 2 === 0;
                 square.className = `square ${isLight ? 'light' : 'dark'}`;
                 square.classList.remove('selected', 'valid-move', 'check');
 
-                // Highlight check
                 if (game.inCheck() && piece?.type === 'k' && piece.color === game.turn()) {
                     square.classList.add('check');
                 }
             });
             updateStatus();
+            updateMoveHistory();
+            updateCapturedPieces();
         }
 
-        // Handle piece movement
         function handleSquareClick(e) {
             if (game.game_over() || isAIThinking) return;
-            
             const pos = e.target.dataset.pos;
             const piece = game.get(pos);
 
@@ -241,7 +304,6 @@
                 return;
             }
 
-            // Select piece
             if (piece?.color === game.turn() && game.turn() === 'w') {
                 selectedSquare = pos;
                 validMoves = game.moves({ square: pos, verbose: true });
@@ -249,7 +311,6 @@
                 return;
             }
 
-            // Make move
             if (selectedSquare) {
                 const move = validMoves.find(m => m.to === pos);
                 if (move) {
@@ -262,29 +323,23 @@
             }
         }
 
-        // Complete move with promotion
         function completeMove(move, promotionPiece = 'q') {
-            try {
-                game.move({ ...move, promotion: promotionPiece });
-                clearSelection();
-                updateBoard();
-                
-                if (!game.game_over()) {
-                    if (game.turn() === 'b') {
-                        isAIThinking = true;
-                        status.textContent = "AI is thinking...";
-                        setTimeout(() => {
-                            stockfish.postMessage(`position fen ${game.fen()}`);
-                            stockfish.postMessage('go depth 15');
-                        }, 500);
-                    }
-                }
-            } catch (e) {
-                console.error('Invalid move:', e);
+            const moveObj = { ...move, promotion: promotionPiece };
+            game.move(moveObj);
+            moveStack.push(game.fen());
+            clearSelection();
+            updateBoard();
+            
+            if (!game.game_over() && game.turn() === 'b') {
+                isAIThinking = true;
+                status.textContent = "AI is thinking...";
+                setTimeout(() => {
+                    stockfish.postMessage(`position fen ${game.fen()}`);
+                    stockfish.postMessage('go depth 15');
+                }, 500);
             }
         }
 
-        // Clear selection and highlights
         function clearSelection() {
             selectedSquare = null;
             validMoves = [];
@@ -293,7 +348,6 @@
             });
         }
 
-        // Stockfish AI handler
         stockfish.onmessage = (event) => {
             const message = event.data;
             if (message.startsWith('bestmove')) {
@@ -301,6 +355,7 @@
                 if (bestMove && bestMove !== 'null') {
                     setTimeout(() => {
                         game.move(bestMove);
+                        moveStack.push(game.fen());
                         updateBoard();
                         isAIThinking = false;
                     }, 500);
@@ -308,7 +363,6 @@
             }
         };
 
-        // Promotion handling
         function showPromotionDialog(from, to) {
             pendingPromotion = { from, to };
             promotionDialog.style.display = 'flex';
@@ -320,13 +374,11 @@
                 promotionDialog.style.display = 'none';
                 completeMove({
                     from: pendingPromotion.from,
-                    to: pendingPromotion.to,
-                    color: game.turn()
+                    to: pendingPromotion.to
                 }, piece);
             });
         });
 
-        // Highlight valid moves
         function highlightMoves() {
             document.querySelectorAll('.square').forEach(square => {
                 square.classList.remove('selected', 'valid-move');
@@ -339,7 +391,6 @@
             });
         }
 
-        // Update game status
         function updateStatus() {
             let statusText = '';
             if (game.inCheckmate()) {
@@ -356,9 +407,9 @@
             status.textContent = statusText;
         }
 
-        // New game
         function newGame() {
             game.reset();
+            moveStack = [game.fen()];
             selectedSquare = null;
             validMoves = [];
             isAIThinking = false;
@@ -367,40 +418,76 @@
             stockfish.postMessage('ucinewgame');
         }
 
-        // Get piece symbols
-       function getPieceSymbol(piece) {
+        function getPieceSymbol(piece) {
             const symbols = {
-                w: { // White pieces
-                    'p': '♙',
-                    'r': '♖',
-                    'n': '♘',
-                    'b': '♗',
-                    'q': '♕',
-                    'k': '♔'
-                },
-                b: { // Black pieces
-                    'p': '♟',
-                    'r': '♜',
-                    'n': '♞',
-                    'b': '♝',
-                    'q': '♛',
-                    'k': '♚'
-                }
+                w: { 'p': '♙', 'r': '♖', 'n': '♘', 'b': '♗', 'q': '♕', 'k': '♔' },
+                b: { 'p': '♟', 'r': '♜', 'n': '♞', 'b': '♝', 'q': '♛', 'k': '♚' }
             };
             return symbols[piece.color][piece.type];
         }
 
-        // Convert algebraic notation to coordinates
         function fromAlgebraic(pos) {
             const file = pos.charCodeAt(0) - 97;
             const rank = 8 - parseInt(pos[1]);
             return [rank, file];
         }
 
-        // Initialize game
+        // New Features
+        function updateMoveHistory() {
+            moveHistory.innerHTML = '';
+            const history = game.history({ verbose: true });
+            history.forEach((move, index) => {
+                const moveDiv = document.createElement('div');
+                moveDiv.className = 'move';
+                moveDiv.textContent = `${Math.floor(index/2) + 1}. ${move.color === 'w' ? move.san : ''} ${move.color === 'b' ? move.san : ''}`;
+                moveHistory.appendChild(moveDiv);
+            });
+        }
+
+        function updateCapturedPieces() {
+            const position = game.fen().split(' ')[0];
+            const pieceCount = {
+                w: { p: 8, r: 2, n: 2, b: 2, q: 1 },
+                b: { p: 8, r: 2, n: 2, b: 2, q: 1 }
+            };
+            
+            position.split('/').forEach(row => {
+                row.split('').forEach(char => {
+                    if (/[prnbq]/.test(char)) pieceCount.b[char]--;
+                    if (/[PRNBQ]/.test(char)) pieceCount.w[char.toLowerCase()]--;
+                });
+            });
+
+            whiteCaptured.innerHTML = '';
+            blackCaptured.innerHTML = '';
+            ['p', 'r', 'n', 'b', 'q'].forEach(type => {
+                const whiteDiff =  pieceCount.b[type];
+                const blackDiff =  pieceCount.w[type];
+                if (whiteDiff > 0) {
+                    whiteCaptured.innerHTML += getPieceSymbol({color: 'b', type}).repeat(whiteDiff);
+                }
+                if (blackDiff > 0) {
+                    blackCaptured.innerHTML += getPieceSymbol({color: 'w', type}).repeat(blackDiff);
+                }
+            });
+        }
+
+        function undoMove() {
+            if (moveStack.length > 1 && !isAIThinking) {
+                moveStack.pop();
+                game.load(moveStack[moveStack.length - 1]);
+                updateBoard();
+            }
+        }
+
+        function toggleNotation() {
+            showNotation = !showNotation;
+            updateBoard();
+        }
+
         createBoard();
         stockfish.postMessage('uci');
-        stockfish.postMessage('setoption name Skill Level value 15');    
+        stockfish.postMessage('setoption name Skill Level value 15');
     </script>
 </body>
 </html>
