@@ -368,12 +368,26 @@
         }
 
         // Get piece symbols
-        function getPieceSymbol(piece) {
+       function getPieceSymbol(piece) {
             const symbols = {
-                'p': '♟', 'r': '♜', 'n': '♞', 'b': '♝', 'q': '♛', 'k': '♚',
-                'P': '♙', 'R': '♖', 'N': '♘', 'B': '♗', 'Q': '♕', 'K': '♔'
+                w: { // White pieces
+                    'p': '♙',
+                    'r': '♖',
+                    'n': '♘',
+                    'b': '♗',
+                    'q': '♕',
+                    'k': '♔'
+                },
+                b: { // Black pieces
+                    'p': '♟',
+                    'r': '♜',
+                    'n': '♞',
+                    'b': '♝',
+                    'q': '♛',
+                    'k': '♚'
+                }
             };
-            return symbols[piece.type.toUpperCase()];
+            return symbols[piece.color][piece.type];
         }
 
         // Convert algebraic notation to coordinates
@@ -386,7 +400,7 @@
         // Initialize game
         createBoard();
         stockfish.postMessage('uci');
-        stockfish.postMessage('setoption name Skill Level value 15');
+        stockfish.postMessage('setoption name Skill Level value 15');    
     </script>
 </body>
 </html>
