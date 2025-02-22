@@ -3,10 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Chess vs AI</title>
-    <style>
-           body {
-            font-family: Arial, sans-serif;
+    <title>Advanced Chess vs AI</title>
+    <style>    body {
             display: flex;
             justify-content: center;
             align-items: center;
@@ -14,28 +12,19 @@
             margin: 0;
             background: #f0f0f0;
         }
-        #game-container {
-            text-align: center;
-            background: #fff;
-            padding: 20px;
-            border-radius: 10px;
-            box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
-        }
         #chessboard {
             display: grid;
-            grid-template-columns: repeat(8, 60px);
-            grid-template-rows: repeat(8, 60px);
+            grid-template-columns: repeat(8, 50px);
+            grid-template-rows: repeat(8, 50px);
             border: 2px solid #333;
-            margin: 20px auto;
         }
         .square {
-            width: 60px;
-            height: 60px;
+            width: 50px;
+            height: 50px;
             display: flex;
             justify-content: center;
             align-items: center;
-            font-size: 40px;
-            cursor: pointer;
+            font-size: 30px;
         }
         .light {
             background: #f0d9b5;
@@ -43,67 +32,371 @@
         .dark {
             background: #b58863;
         }
-        .selected {
-            background: #ffff99 !important;
-        }
-        .valid-move {
-            background: #99ff99 !important;
-        }
-        #status {
-            font-size: 18px;
-            margin-top: 10px;
-        }
-        button {
-            padding: 10px 20px;
-            font-size: 16px;
-            margin-top: 10px;
-            cursor: pointer;
-        }
     </style>
 </head>
 <body>
-    <div id="game-container">
-        <h1>Chess vs AI</h1>
-        <div id="chessboard"></div>
-        <div id="status"></div>
-        <button onclick="restartGame()">Restart Game</button>
+    <div id="chessboard">
+        <!-- Row 1 -->
+        <div class="square dark">♜</div>
+        <div class="square light">♞</div>
+        <div class="square dark">♝</div>
+        <div class="square light">♛</div>
+        <div class="square dark">♚</div>
+        <div class="square light">♝</div>
+        <div class="square dark">♞</div>
+        <div class="square light">♜</div>
+        <!-- Row 2 -->
+        <div class="square light">♟</div>
+        <div class="square dark">♟</div>
+        <div class="square light">♟</div>
+        <div class="square dark">♟</div>
+        <div class="square light">♟</div>
+        <div class="square dark">♟</div>
+        <div class="square light">♟</div>
+        <div class="square dark">♟</div>
+        <!-- Row 3 -->
+        <div class="square dark"></div>
+        <div class="square light"></div>
+        <div class="square dark"></div>
+        <div class="square light"></div>
+        <div class="square dark"></div>
+        <div class="square light"></div>
+        <div class="square dark"></div>
+        <div class="square light"></div>
+        <!-- Row 4 -->
+        <div class="square light"></div>
+        <div class="square dark"></div>
+        <div class="square light"></div>
+        <div class="square dark"></div>
+        <div class="square light"></div>
+        <div class="square dark"></div>
+        <div class="square light"></div>
+        <div class="square dark"></div>
+        <!-- Row 5 -->
+        <div class="square dark"></div>
+        <div class="square light"></div>
+        <div class="square dark"></div>
+        <div class="square light"></div>
+        <div class="square dark"></div>
+        <div class="square light"></div>
+        <div class="square dark"></div>
+        <div class="square light"></div>
+        <!-- Row 6 -->
+        <div class="square light"></div>
+        <div class="square dark"></div>
+        <div class="square light"></div>
+        <div class="square dark"></div>
+        <div class="square light"></div>
+        <div class="square dark"></div>
+        <div class="square light"></div>
+        <div class="square dark"></div>
+        <!-- Row 7 -->
+        <div class="square dark">♙</div>
+        <div class="square light">♙</div>
+        <div class="square dark">♙</div>
+        <div class="square light">♙</div>
+        <div class="square dark">♙</div>
+        <div class="square light">♙</div>
+        <div class="square dark">♙</div>
+        <div class="square light">♙</div>
+        <!-- Row 8 -->
+        <div class="square light">♖</div>
+        <div class="square dark">♘</div>
+        <div class="square light">♗</div>
+        <div class="square dark">♕</div>
+        <div class="square light">♔</div>
+        <div class="square dark">♗</div>
+        <div class="square light">♘</div>
+        <div class="square dark">♖</div>
+    </div>
+        <div class="game-info">
+            <div class="status-panel">
+                <h2 class="status-title">Game Status</h2>
+                <div id="game-status"></div>
+                <div class="controls">
+                    <button onclick="newGame()">New Game</button>
+                    <button onclick="toggleOrientation()">Flip Board</button>
+                </div>
+            </div>
+            <div class="ai-settings">
+                <h3>AI Difficulty: <span id="difficulty-value">15</span></h3>
+                <input type="range" min="0" max="20" value="15" class="difficulty-slider" id="difficulty">
+            </div>
+            <div class="move-history">
+                <h3>Move History</h3>
+                <div id="move-list"></div>
+            </div>
+            <div class="captured-pieces">
+                <h3>Captured Pieces</h3>
+                <div id="captured-white"></div>
+                <div id="captured-black"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="promotion-dialog" id="promotion-dialog">
+        <div class="promotion-option" data-piece="q">♕</div>
+        <div class="promotion-option" data-piece="r">♖</div>
+        <div class="promotion-option" data-piece="b">♗</div>
+        <div class="promotion-option" data-piece="n">♘</div>
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
     <script>
-        const boardElement = document.getElementById('chessboard');
-        const statusElement = document.getElementById('status');
         const chess = new Chess();
-        const stockfish = new Worker('https://unpkg.com/stockfish-js@0.12.0/stockfish.js');
+        const boardElement = document.getElementById('chessboard');
+        const statusElement = document.getElementById('game-status');
+        const moveListElement = document.getElementById('move-list');
+        const capturedWhiteElement = document.getElementById('captured-white');
+        const capturedBlackElement = document.getElementById('captured-black');
+        const promotionDialog = document.getElementById('promotion-dialog');
+        const difficultySlider = document.getElementById('difficulty');
+        const difficultyValue = document.getElementById('difficulty-value');
+
         let selectedSquare = null;
         let validMoves = [];
-        let aiThinking = false;
+        let boardOrientation = 'white';
+        let aiWorker = null;
+        let pendingPromotion = null;
+        let capturedPieces = { w: [], b: [] };
 
-        // Set AI difficulty (skill level 0-20)
-        const aiSkillLevel = 15;
-
-        // Initialize Stockfish
-        stockfish.postMessage('uci');
-        stockfish.postMessage(`setoption name Skill Level value ${aiSkillLevel}`);
-
-        function initializeBoard() {
-            boardElement.innerHTML = '';
-            const board = chess.board();
-            for (let row = 0; row < 8; row++) {
-                for (let col = 0; col < 8; col++) {
-                    const square = document.createElement('div');
-                    square.className = `square ${(row + col) % 2 === 0 ? 'light' : 'dark'}`;
-                    square.dataset.position = toAlgebraic(row, col);
-                    const piece = board[row][col];
-                    if (piece) {
-                        square.textContent = getPieceSymbol(piece);
+        // Initialize Stockfish AI worker
+        function initAI() {
+            if (aiWorker) aiWorker.terminate();
+            aiWorker = new Worker('https://unpkg.com/stockfish-js@0.12.0/stockfish.js');
+            
+            aiWorker.onmessage = (event) => {
+                const message = event.data;
+                if (message.startsWith('bestmove')) {
+                    const bestMove = message.split(' ')[1];
+                    if (bestMove && bestMove !== 'null') {
+                        makeMove(bestMove);
                     }
-                    square.addEventListener('click', () => handleSquareClick(square.dataset.position));
+                }
+            };
+
+            aiWorker.postMessage('uci');
+            aiWorker.postMessage('setoption name Skill Level value ' + difficultySlider.value);
+        }
+
+        // Initialize game board
+        function initBoard() {
+            boardElement.innerHTML = '';
+            for (let rank = 0; rank < 8; rank++) {
+                for (let file = 0; file < 8; file++) {
+                    const square = document.createElement('div');
+                    const isLight = (rank + file) % 2 === 0;
+                    square.className = `square ${isLight ? 'light' : 'dark'}`;
+                    square.dataset.position = toAlgebraic(rank, file);
+                    
+                    // Add coordinates
+                    if (file === 0) {
+                        const rankCoord = document.createElement('div');
+                        rankCoord.className = 'coordinates rank-coordinates';
+                        rankCoord.textContent = 8 - rank;
+                        square.appendChild(rankCoord);
+                    }
+                    if (rank === 7) {
+                        const fileCoord = document.createElement('div');
+                        fileCoord.className = 'coordinates file-coordinates';
+                        fileCoord.textContent = String.fromCharCode(97 + file);
+                        square.appendChild(fileCoord);
+                    }
+
+                    square.addEventListener('click', handleSquareClick);
                     boardElement.appendChild(square);
                 }
             }
-            highlightValidMoves();
+            updateBoard();
+        }
+
+        // Update board state
+        function updateBoard() {
+            const squares = boardElement.querySelectorAll('.square');
+            squares.forEach(square => {
+                const position = square.dataset.position;
+                const piece = chess.get(position);
+                square.innerHTML = piece ? getPieceSymbol(piece) : '';
+                square.className = square.className.replace(/ selected|valid-move|in-check/g, '');
+                
+                // Restore base color
+                const [rank, file] = fromAlgebraic(position);
+                const isLight = (rank + file) % 2 === 0;
+                square.className = `square ${isLight ? 'light' : 'dark'}`;
+
+                // Restore coordinates
+                if (file === 0) {
+                    const rankCoord = document.createElement('div');
+                    rankCoord.className = 'coordinates rank-coordinates';
+                    rankCoord.textContent = 8 - rank;
+                    square.appendChild(rankCoord);
+                }
+                if (rank === 7) {
+                    const fileCoord = document.createElement('div');
+                    fileCoord.className = 'coordinates file-coordinates';
+                    fileCoord.textContent = String.fromCharCode(97 + file);
+                    square.appendChild(fileCoord);
+                }
+            });
+
+            // Highlight check
+            if (chess.inCheck()) {
+                const kingSquare = chess.board().flat().find(sq => sq && sq.type === 'k' && sq.color === chess.turn());
+                if (kingSquare) {
+                    const kingPos = toAlgebraic(kingSquare.square);
+                    document.querySelector(`[data-position="${kingPos}"]`).classList.add('in-check');
+                }
+            }
+
             updateStatus();
+            updateMoveHistory();
+            updateCapturedPieces();
+        }
+
+        // Handle square clicks
+        function handleSquareClick(event) {
+            if (chess.isGameOver() || chess.turn() !== 'w') return;
+
+            const position = event.target.closest('.square').dataset.position;
+            const piece = chess.get(position);
+
+            if (selectedSquare === position) {
+                clearSelection();
+                return;
+            }
+
+            if (selectedSquare) {
+                const move = tryMove(selectedSquare, position);
+                if (move) {
+                    if (move.flags.includes('p') && move.piece === 'p') {
+                        showPromotionDialog(position, move.color);
+                    } else {
+                        completeMove(move);
+                    }
+                }
+            } else if (piece && piece.color === 'w') {
+                selectSquare(position);
+            }
+        }
+
+        function selectSquare(position) {
+            selectedSquare = position;
+            validMoves = chess.moves({ square: position, verbose: true });
+            highlightValidMoves();
+        }
+
+        function highlightValidMoves() {
+            validMoves.forEach(move => {
+                const square = document.querySelector(`[data-position="${move.to}"]`);
+                if (square) square.classList.add('valid-move');
+            });
+            document.querySelector(`[data-position="${selectedSquare}"]`).classList.add('selected');
+        }
+
+        function tryMove(from, to) {
+            try {
+                return chess.move({ from, to, promotion: 'q' });
+            } catch {
+                return null;
+            }
+        }
+
+        function completeMove(move) {
+            capturedPieces[move.color === 'w' ? 'b' : 'w'].push(...(move.captured || []));
+            clearSelection();
+            updateBoard();
+            if (!chess.isGameOver()) {
+                aiWorker.postMessage(`position fen ${chess.fen()}`);
+                aiWorker.postMessage(`go depth ${difficultySlider.value}`);
+            }
+        }
+
+        function showPromotionDialog(position, color) {
+            promotionDialog.style.display = 'flex';
+            pendingPromotion = { from: selectedSquare, to: position, color };
+        }
+
+        function handlePromotion(piece) {
+            const move = chess.move({
+                from: pendingPromotion.from,
+                to: pendingPromotion.to,
+                promotion: piece
+            });
+            promotionDialog.style.display = 'none';
+            pendingPromotion = null;
+            completeMove(move);
+        }
+
+        function makeMove(moveString) {
+            const move = chess.move(moveString);
+            if (move) {
+                capturedPieces[move.color === 'w' ? 'b' : 'w'].push(...(move.captured || []));
+                updateBoard();
+            }
+        }
+
+        function updateStatus() {
+            let status = '';
+            if (chess.isCheckmate()) {
+                status = `Checkmate! ${chess.turn() === 'w' ? 'Black' : 'White'} wins!`;
+            } else if (chess.isDraw()) {
+                status = 'Draw!';
+            } else if (chess.isStalemate()) {
+                status = 'Stalemate!';
+            } else if (chess.inCheck()) {
+                status = `Check! ${chess.turn() === 'w' ? 'White' : 'Black'}'s turn`;
+            } else {
+                status = `${chess.turn() === 'w' ? 'White' : 'Black'}'s turn`;
+            }
+            statusElement.textContent = status;
+        }
+
+        function updateMoveHistory() {
+            moveListElement.innerHTML = chess.history({ verbose: true }).map((move, index) => `
+                <div class="history-item">
+                    ${Math.floor(index/2) + 1}. ${index % 2 === 0 ? '' : move.san}
+                </div>
+            `).join('');
+        }
+
+        function updateCapturedPieces() {
+            capturedWhiteElement.innerHTML = capturedPieces.b.map(p => getPieceSymbol({ type: p, color: 'b' })).join('');
+            capturedBlackElement.innerHTML = capturedPieces.w.map(p => getPieceSymbol({ type: p, color: 'w' })).join('');
+        }
+
+        function clearSelection() {
+            selectedSquare = null;
+            validMoves = [];
+            boardElement.querySelectorAll('.square').forEach(sq => {
+                sq.classList.remove('selected', 'valid-move');
+            });
+        }
+
+        function newGame() {
+            chess.reset();
+            capturedPieces = { w: [], b: [] };
+            clearSelection();
+            initAI();
+            updateBoard();
+        }
+
+        function toggleOrientation() {
+            boardOrientation = boardOrientation === 'white' ? 'black' : 'white';
+            boardElement.style.transform = boardOrientation === 'black' ? 'rotate(180deg)' : 'none';
+            document.querySelectorAll('.square').forEach(sq => {
+                sq.style.transform = boardOrientation === 'black' ? 'rotate(180deg)' : 'none';
+            });
+            updateBoard();
+        }
+
+        function toAlgebraic(rank, file) {
+            return String.fromCharCode(97 + file) + (8 - rank);
+        }
+
+        function fromAlgebraic(position) {
+            const file = position.charCodeAt(0) - 97;
+            const rank = 8 - parseInt(position[1]);
+            return [rank, file];
         }
 
         function getPieceSymbol(piece) {
@@ -114,110 +407,20 @@
             return symbols[piece.type.toUpperCase()];
         }
 
-        function handleSquareClick(position) {
-            if (aiThinking || chess.game_over()) return;
+        // Event listeners
+        document.querySelectorAll('.promotion-option').forEach(option => {
+            option.addEventListener('click', () => handlePromotion(option.dataset.piece));
+        });
 
-            // Human player's turn (White)
-            if (chess.turn() === 'w') {
-                if (selectedSquare === position) {
-                    clearSelection();
-                    return;
-                }
+        difficultySlider.addEventListener('input', () => {
+            difficultyValue.textContent = difficultySlider.value;
+            aiWorker.postMessage(`setoption name Skill Level value ${difficultySlider.value}`);
+        });
 
-                if (selectedSquare) {
-                    tryMove(selectedSquare, position);
-                } else {
-                    selectSquare(position);
-                }
-            }
-        }
-
-        function selectSquare(position) {
-            const moves = chess.moves({ square: position, verbose: true });
-            if (moves.length > 0 && chess.get(position).color === 'w') {
-                selectedSquare = position;
-                validMoves = moves.map(m => m.to);
-                highlightValidMoves();
-            }
-        }
-
-        function tryMove(from, to) {
-            const move = chess.move({ from, to, promotion: 'q' });
-            if (move) {
-                clearSelection();
-                initializeBoard();
-                if (!chess.game_over()) {
-                    aiThinking = true;
-                    requestAiMove();
-                }
-            } else {
-                clearSelection();
-                selectSquare(to);
-            }
-        }
-
-        function requestAiMove() {
-            stockfish.postMessage(`position fen ${chess.fen()}`);
-            stockfish.postMessage('go depth 10');
-        }
-
-        stockfish.onmessage = (event) => {
-            const message = event.data;
-            if (message.startsWith('bestmove')) {
-                const bestMove = message.split(' ')[1];
-                if (bestMove && bestMove !== 'null') {
-                    chess.move(bestMove);
-                    initializeBoard();
-                    aiThinking = false;
-                }
-            }
-        };
-
-        function highlightValidMoves() {
-            document.querySelectorAll('.square').forEach(square => {
-                square.classList.remove('selected', 'valid-move');
-                if (square.dataset.position === selectedSquare) {
-                    square.classList.add('selected');
-                }
-                if (validMoves.includes(square.dataset.position)) {
-                    square.classList.add('valid-move');
-                }
-            });
-        }
-
-        function updateStatus() {
-            let status = '';
-            if (chess.in_checkmate()) {
-                status = `Checkmate! ${chess.turn() === 'w' ? 'Black' : 'White'} wins!`;
-            } else if (chess.in_draw()) {
-                status = 'Draw!';
-            } else if (chess.in_check()) {
-                status = `Check! ${chess.turn() === 'w' ? 'White' : 'Black'}'s turn`;
-            } else {
-                status = `${chess.turn() === 'w' ? 'White' : 'Black'}'s turn`;
-            }
-            statusElement.textContent = status;
-        }
-
-        function toAlgebraic(row, col) {
-            const files = 'abcdefgh';
-            return files[col] + (8 - row);
-        }
-
-        function clearSelection() {
-            selectedSquare = null;
-            validMoves = [];
-            highlightValidMoves();
-        }
-
-        function restartGame() {
-            chess.reset();
-            aiThinking = false;
-            clearSelection();
-            initializeBoard();
-        }
-
-        initializeBoard();
+        // Initial setup
+        initAI();
+        initBoard();
+        newGame();
     </script>
 </body>
 </html>
