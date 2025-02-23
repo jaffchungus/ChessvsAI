@@ -281,10 +281,12 @@
         document.getElementById('difficulty-select').value = level;
     }
 
-    // Evaluation function
+    // Enhanced evaluation function for Level 15
     function evaluateBoard(tempGame) {
         const board = tempGame.board();
         let score = 0;
+
+        // Material count
         for (let row = 0; row < 8; row++) {
             for (let col = 0; col < 8; col++) {
                 const piece = board[row][col];
@@ -294,19 +296,56 @@
                 }
             }
         }
+
+        // Mobility
         const moves = tempGame.moves({ verbose: true });
-        score += tempGame.turn() === 'w' ? moves.length * 5 : -moves.length * 5;
+        score += tempGame.turn() === 'w' ? moves.length * 10 : -moves.length * 10;
+
+        // Center control
         const centerSquares = ['d4', 'd5', 'e4', 'e5'];
         centerSquares.forEach(square => {
             const piece = tempGame.get(square);
             if (piece) {
-                if (piece.color === 'w' && (piece.type === 'p' || piece.type === 'n')) score += 20;
-                if (piece.color === 'b' && (piece.type === 'p' || piece.type === 'n')) score -= 20;
+                if (piece.color === 'w' && (piece.type === 'p' || piece.type === 'n')) score += 30;
+                if (piece.color === 'b' && (piece.type === 'p' || piece.type === 'n')) score -= 30;
             }
         });
-        if (tempGame.in_check()) {
-            score += tempGame.turn() === 'w' ? -50 : 50;
+
+        // King safety
+        const whiteKing = board.flat().find(p => p && p.type === 'k' && p.color === 'w');
+        const blackKing = board.flat().find(p => p && p.type === 'k' && p.color === 'b');
+        if (whiteKing) {
+            const row = Math.floor(board.flat().indexOf(whiteKing) / 8);
+            const col = board.flat().indexOf(whiteKing) % 8;
+            score -= 10 * (Math.abs(7 - row) + Math.abs(3.5 - col)); // Favor king near back rank, center
         }
+        if (blackKing) {
+            const row = Math.floor(board.flat().indexOf(blackKing) / 8);
+            const col = board.flat().indexOf(blackKing) % 8;
+            score += 10 * (Math.abs(0 - row) + Math.abs(3.5 - col));
+        }
+
+        // Pawn structure (doubled pawns)
+        for (let col = 0; col < 8; col++) {
+            let whitePawns = 0, blackPawns = 0;
+            for (let row = 0; row < 8; row++) {
+                const piece = board[row][col];
+                if (piece && piece.type === 'p') {
+                    if (piece.color === 'w') whitePawns++;
+                    else blackPawns++;
+                }
+            }
+            if (whitePawns > 1) score -= 20 * (whitePawns - 1);
+            if (blackPawns > 1) score += 20 * (blackPawns - 1);
+        }
+
+        // Check and checkmate
+        if (tempGame.in_checkmate()) {
+            score += tempGame.turn() === 'w' ? -10000 : 10000;
+        } else if (tempGame.in_check()) {
+            score += tempGame.turn() === 'w' ? -100 : 100;
+        }
+
         return score;
     }
 
@@ -351,22 +390,36 @@
         }
     }
 
-    // Iterative deepening for Level 15
-    function getBestMove(tempGame) {
+    // Get perfect move for Level 15
+    function getPerfectMove(tempGame) {
         const startTime = Date.now();
         const timeLimit = 1500; // 1.5 seconds
-        const maxDepth = 10; // Adjusted for speed, still strong
+        const maxDepth = 6; // Strong depth within time limit
         let bestMove = null;
         let bestScore = game.turn() === 'w' ? -Infinity : Infinity;
 
         const moves = orderMoves(tempGame.moves({ verbose: true }));
         if (moves.length === 0) return moves[0];
 
+        // Check for immediate checkmate or strong captures first
+        for (const move of moves) {
+            const newGame = new Chess(tempGame.fen());
+            newGame.move(move);
+            if (newGame.in_checkmate()) {
+                return move; // Immediate winning move
+            }
+            if (move.captured && pieceValues[move.captured] >= pieceValues.q) {
+                bestMove = move; // Prioritize capturing queens or rooks
+                bestScore = evaluateBoard(newGame);
+            }
+        }
+
+        // Iterative deepening
         for (let depth = 1; depth <= maxDepth; depth++) {
             let alpha = -Infinity;
             let beta = Infinity;
-            let currentBestMove = moves[0];
-            let currentBestScore = game.turn() === 'w' ? -Infinity : Infinity;
+            let currentBestMove = bestMove || moves[0];
+            let currentBestScore = bestScore;
 
             for (const move of moves) {
                 const newGame = new Chess(tempGame.fen());
@@ -412,7 +465,7 @@
         const randomness = Math.max(0, 15 - aiDifficulty) * 0.15;
 
         if (aiDifficulty === 15) {
-            bestMove = getBestMove(game);
+            bestMove = getPerfectMove(game);
             if (bestMove) {
                 game.move(bestMove);
                 moveStack.push({ fen: game.fen(), move: bestMove.san });
