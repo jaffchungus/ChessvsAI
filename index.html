@@ -70,7 +70,12 @@
             margin-bottom: 10px;
             font-size: 18px;
         }
-        #difficulty-select {
+        #timer {
+            color: white;
+            margin-top: 10px;
+            font-size: 16px;
+        }
+        #difficulty-select, #timer-toggle {
             margin-top: 10px;
             padding: 5px;
             font-size: 16px;
@@ -104,14 +109,20 @@
             <option value="6">Level 6</option>
             <option value="7">Level 7</option>
             <option value="8">Level 8</option>
-            <option value="9">Level 9</option>
-            <option value="10" selected>Level 10 (Hardest)</option>
+            <option value="9" selected>Level 9 (Hardest)</option>
         </select>
+        <div id="timer">White: 10:00 | Black: 10:00</div>
+        <div>
+            <input type="checkbox" id="timer-toggle" onchange="toggleTimer(this.checked)">
+            <label for="timer-toggle" style="color: white;">Use Timer</label>
+        </div>
         <div id="error-message"></div>
     </div>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
     <script>
         let game, selectedSquare, showNotation, aiDifficulty, isAIThinking, moveStack;
+        let whiteTime = 600, blackTime = 600; // 10 minutes in seconds
+        let timerOn = false, timerInterval = null;
 
         // Chess piece symbols
         const pieceSymbols = {
@@ -128,10 +139,11 @@
             moveStack = [];
             selectedSquare = null;
             showNotation = false;
-            aiDifficulty = 10; // Default to hardest level
+            aiDifficulty = 9; // Default to hardest level (9)
             isAIThinking = false;
             createBoard();
             updateStatus();
+            updateTimerDisplay();
         });
 
         // Create chessboard
@@ -185,7 +197,6 @@
                     selectedSquare = null;
                     if (!game.game_over()) {
                         isAIThinking = true;
-                        updateStatus();
                         setTimeout(getAIMove, 500); // Delay for AI move
                     }
                 } else {
@@ -226,12 +237,10 @@
             document.getElementById('difficulty-select').value = level;
         }
 
-        // Evaluate board position (positive = good for Black, negative = good for White)
+        // Evaluate board position
         function evaluateBoard(tempGame) {
             const board = tempGame.board();
             let score = 0;
-
-            // Material count
             for (let row = 0; row < 8; row++) {
                 for (let col = 0; col < 8; col++) {
                     const piece = board[row][col];
@@ -241,16 +250,11 @@
                     }
                 }
             }
-
-            // Piece mobility (number of legal moves)
             const moves = tempGame.moves({ verbose: true });
             score += tempGame.turn() === 'b' ? moves.length * 5 : -moves.length * 5;
-
-            // King safety (simplified: penalize if in check)
             if (tempGame.in_check()) {
                 score += tempGame.turn() === 'b' ? -50 : 50;
             }
-
             return score;
         }
 
@@ -259,7 +263,6 @@
             if (depth === 0 || tempGame.game_over()) {
                 return evaluateBoard(tempGame);
             }
-
             const moves = tempGame.moves({ verbose: true });
             if (isMaximizing) {
                 let maxEval = -Infinity;
@@ -282,7 +285,7 @@
             }
         }
 
-        // AI move selection
+        // AI move selection (adjusted for 1-9 levels)
         function getAIMove() {
             const moves = game.moves({ verbose: true });
             if (moves.length === 0) {
@@ -292,7 +295,7 @@
             }
 
             let bestMove;
-            const randomness = Math.max(0, 10 - aiDifficulty) * 0.1; // More random at lower levels
+            const randomness = Math.max(0, 9 - aiDifficulty) * 0.1; // Adjusted for 9 levels
 
             if (aiDifficulty <= 3) {
                 // Levels 1-3: Mostly random with slight preference for captures
@@ -303,8 +306,8 @@
                 evaluatedMoves.sort((a, b) => b.value - a.value);
                 const topMoves = evaluatedMoves.slice(0, Math.min(5, evaluatedMoves.length));
                 bestMove = topMoves[Math.floor(Math.random() * topMoves.length)].move;
-            } else if (aiDifficulty <= 7) {
-                // Levels 4-7: Evaluate immediate moves with basic scoring
+            } else if (aiDifficulty <= 6) {
+                // Levels 4-6: Evaluate immediate moves with basic scoring
                 const evaluatedMoves = moves.map(move => {
                     const tempGame = new Chess(game.fen());
                     tempGame.move(move);
@@ -315,8 +318,8 @@
                     evaluatedMoves[0].move :
                     moves[Math.floor(Math.random() * moves.length)];
             } else {
-                // Levels 8-10: Use minimax with increasing depth
-                const depth = aiDifficulty === 8 ? 1 : aiDifficulty === 9 ? 2 : 3;
+                // Levels 7-9: Use minimax with increasing depth (1-3)
+                const depth = aiDifficulty === 7 ? 1 : aiDifficulty === 8 ? 2 : 3;
                 const evaluatedMoves = moves.map(move => {
                     const tempGame = new Chess(game.fen());
                     tempGame.move(move);
@@ -339,20 +342,32 @@
         // Check game over conditions
         function checkGameOver() {
             if (game.in_checkmate()) {
-                alert(`Checkmate! ${game.turn() === 'w' ? 'Black' : 'White'} wins!`);
+                const winner = game.turn() === 'w' ? 'Black' : 'White';
+                alert(`Checkmate! ${winner} wins!`);
+                stopTimer();
             } else if (game.in_stalemate() || game.in_draw()) {
                 alert('Game ended in a draw!');
+                stopTimer();
+            } else if (timerOn && (whiteTime <= 0 || blackTime <= 0)) {
+                const winner = whiteTime <= 0 ? 'Black' : 'White';
+                alert(`Time's up! ${winner} wins!`);
+                stopTimer();
+                game.game_over = () => true; // Mark game as over
             }
         }
 
         // Start new game
         function newGame() {
-            game.reset();
+            game = new Chess();
             moveStack = [];
             selectedSquare = null;
             isAIThinking = false;
+            whiteTime = 600;
+            blackTime = 600;
             createBoard();
             updateStatus();
+            updateTimerDisplay();
+            if (timerOn) startTimer();
         }
 
         // Undo move
@@ -385,7 +400,44 @@
                     'Draw!';
             } else {
                 statusDiv.textContent = `${game.turn() === 'w' ? 'White' : 'Black'} to move${game.in_check() ? ' (in check)' : ''}`;
-                if (isAIThinking) statusDiv.textContent = 'AI is thinking...';
+            }
+        }
+
+        // Timer functions
+        function updateTimerDisplay() {
+            const whiteMins = Math.floor(whiteTime / 60);
+            const whiteSecs = Math.floor(whiteTime % 60).toString().padStart(2, '0');
+            const blackMins = Math.floor(blackTime / 60);
+            const blackSecs = Math.floor(blackTime % 60).toString().padStart(2, '0');
+            document.getElementById('timer').textContent = `White: ${whiteMins}:${whiteSecs} | Black: ${blackMins}:${blackSecs}`;
+        }
+
+        function startTimer() {
+            stopTimer(); // Clear any existing timer
+            timerInterval = setInterval(() => {
+                if (game.turn() === 'w') {
+                    whiteTime = Math.max(0, whiteTime - 1);
+                } else {
+                    blackTime = Math.max(0, blackTime - 1);
+                }
+                updateTimerDisplay();
+                checkGameOver();
+            }, 1000);
+        }
+
+        function stopTimer() {
+            if (timerInterval) {
+                clearInterval(timerInterval);
+                timerInterval = null;
+            }
+        }
+
+        function toggleTimer(checked) {
+            timerOn = checked;
+            if (timerOn && !game.game_over()) {
+                startTimer();
+            } else {
+                stopTimer();
             }
         }
 
