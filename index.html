@@ -185,7 +185,7 @@
             if (selectedSquare) {
                 const move = game.move({ from: selectedSquare, to: pos, promotion: 'q' });
                 if (move) {
-                    moveStack.push({ fen: game.fen(), move: move });
+                    moveStack.push({ fen: game.fen(), move: move.san }); // Store SAN for easier tracking
                     updateBoard();
                     clearHighlights();
                     selectedSquare = null;
@@ -237,7 +237,7 @@
         // AI move using minimax with alpha-beta pruning
         function makeAIMove() {
             const depth = aiDifficulty; // Use difficulty level as search depth
-            const bestMove = minimaxRoot(depth, true);
+            const bestMove = findBestMove(depth);
             if (bestMove) {
                 game.move(bestMove);
                 moveStack.push({ fen: game.fen(), move: bestMove });
@@ -248,6 +248,24 @@
                     alert('Game ended in a draw!');
                 }
             }
+        }
+
+        // Find the best move for AI using minimax with alpha-beta pruning
+        function findBestMove(depth) {
+            let bestMove = null;
+            let bestValue = -Infinity;
+            const moves = game.moves({ verbose: true }); // Get verbose moves for SAN format
+
+            for (const move of moves) {
+                game.move(move.san); // Use SAN format for compatibility with Chess.js
+                const value = minimax(depth - 1, -Infinity, Infinity, false);
+                game.undo();
+                if (value > bestValue) {
+                    bestValue = value;
+                    bestMove = move.san; // Store as SAN string for game.move()
+                }
+            }
+            return bestMove;
         }
 
         // Minimax algorithm with alpha-beta pruning
@@ -282,28 +300,6 @@
             }
         }
 
-        // Find the best move at the root
-        function minimaxRoot(depth, maximizingPlayer) {
-            let bestMove = null;
-            let bestValue = maximizingPlayer ? -Infinity : Infinity;
-            const moves = game.moves({ verbose: true });
-
-            for (const move of moves) {
-                game.move(move);
-                const value = minimax(depth - 1, -Infinity, Infinity, !maximizingPlayer);
-                game.undo();
-
-                if (maximizingPlayer && value > bestValue) {
-                    bestValue = value;
-                    bestMove = move;
-                } else if (!maximizingPlayer && value < bestValue) {
-                    bestValue = value;
-                    bestMove = move;
-                }
-            }
-            return bestMove;
-        }
-
         // Evaluate the board position
         function evaluateBoard() {
             let score = 0;
@@ -320,9 +316,10 @@
             }
 
             if (game.in_checkmate()) {
-                score = game.turn() === 'w' ? -100000 : 100000;
-            } else if (game.in_stalemate() || game.in_draw()) {
-                score = 0;
+                return game.turn() === 'w' ? -100000 : 100000;
+            }
+            if (game.in_stalemate() || game.in_draw()) {
+                return 0;
             }
 
             return score;
@@ -378,6 +375,7 @@
 
         // Initialize the game
         createBoard();
+        setDifficulty(15); // Set default to highest difficulty
         updateStatus();
     </script>
 </body>
