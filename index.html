@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Chess vs AI (Stockfish)</title>
+    <title>Chess vs AI</title>
     <style>
         body {
             background-color: #1e2a44;
@@ -23,6 +23,7 @@
             grid-template-rows: repeat(8, 60px);
             gap: 0;
             margin: 0 auto;
+            border: 2px solid #fff;
         }
         .square {
             width: 60px;
@@ -32,6 +33,7 @@
             justify-content: center;
             font-size: 40px;
             position: relative;
+            font-family: "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif; /* Ensure Unicode support */
         }
         .light {
             background-color: #ebecd0;
@@ -82,6 +84,11 @@
             padding: 5px;
             font-size: 16px;
         }
+        #error-message {
+            color: red;
+            margin-top: 10px;
+            display: none;
+        }
     </style>
 </head>
 <body>
@@ -110,17 +117,33 @@
             <option value="14">Level 14</option>
             <option value="15" selected>Level 15 (Hardest)</option>
         </select>
+        <div id="error-message"></div>
     </div>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
-    <script src="https://unpkg.com/stockfish-js@0.12.0/stockfish.js"></script>
     <script>
-        const game = new Chess();
-        const stockfish = new Worker('https://unpkg.com/stockfish-js@0.12.0/stockfish.js');
-        let selectedSquare = null;
-        let showNotation = false;
-        let aiDifficulty = 15; // Default to highest difficulty
-        let isAIThinking = false;
-        let moveStack = []; // Track moves for undo
+        let game, stockfish, selectedSquare, showNotation, aiDifficulty, isAIThinking, moveStack;
+
+        // Initialize game and AI on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            try {
+                game = new Chess();
+                stockfish = new Worker('https://unpkg.com/stockfish-js@0.12.0/stockfish.js');
+                selectedSquare = null;
+                showNotation = false;
+                aiDifficulty = 15; // Default to highest difficulty
+                isAIThinking = false;
+                moveStack = []; // Track moves for undo
+
+                // Initialize Stockfish
+                stockfish.onmessage = handleStockfishMessage;
+                stockfish.postMessage('uci');
+                setDifficulty(15); // Set default difficulty
+                createBoard();
+                updateStatus();
+            } catch (error) {
+                showError(`Initialization failed: ${error.message}`);
+            }
+        });
 
         // Map of chess piece types to Unicode symbols
         const pieceSymbols = {
@@ -157,6 +180,7 @@
 
         // Update the board with current pieces and notation
         function updateBoard() {
+            if (!game) return;
             const boardState = game.board();
             for (let row = 0; row < 8; row++) {
                 for (let col = 0; col < 8; col++) {
@@ -173,7 +197,7 @@
 
         // Handle square clicks for piece movement
         function handleSquareClick(e) {
-            if (game.game_over() || isAIThinking) return;
+            if (!game || game.game_over() || isAIThinking) return;
 
             const pos = e.currentTarget.dataset.pos;
             const piece = game.get(pos);
@@ -230,19 +254,25 @@
 
         // Set AI difficulty level
         function setDifficulty(level) {
+            if (!stockfish) return;
             aiDifficulty = parseInt(level);
-            stockfish.postMessage(`setoption name Skill Level value ${aiDifficulty}`); // No API key needed
+            stockfish.postMessage(`setoption name Skill Level value ${aiDifficulty}`);
             document.getElementById('difficulty-select').value = level;
         }
 
         // Get AI move from Stockfish
         function getAIMove() {
+            if (!stockfish) {
+                showError('Stockfish AI is not loaded. Please check your internet connection or browser compatibility.');
+                isAIThinking = false;
+                return;
+            }
             stockfish.postMessage('position fen ' + game.fen());
             stockfish.postMessage('go depth 15'); // Use fixed depth, adjusted by Skill Level
         }
 
         // Handle Stockfish responses
-        stockfish.onmessage = function(event) {
+        function handleStockfishMessage(event) {
             const message = event.data;
             if (message.startsWith('bestmove')) {
                 const bestMove = message.split(' ')[1];
@@ -257,32 +287,38 @@
                         alert('Game ended in a draw!');
                     }
                 }
+            } else if (message.startsWith('error')) {
+                showError('Stockfish error: ' + message);
+                isAIThinking = false;
             }
-        };
+        }
 
         // Start a new game
         function newGame() {
+            if (!game || !stockfish) {
+                showError('Game initialization failed. Please refresh the page.');
+                return;
+            }
             game.reset();
             moveStack = []; // Clear move history
             selectedSquare = null;
             isAIThinking = false;
             createBoard();
-            stockfish.postMessage('ucinewgame'); // No API key needed
+            stockfish.postMessage('ucinewgame');
             updateStatus();
         }
 
         // Undo the last move
         function undoMove() {
-            if (moveStack.length > 0 && !isAIThinking) {
-                moveStack.pop(); // Remove AI or player move
-                if (moveStack.length > 0) {
-                    game.load(moveStack[moveStack.length - 1].fen);
-                } else {
-                    game.reset();
-                }
-                selectedSquare = null;
-                updateBoard();
+            if (!game || moveStack.length === 0 || isAIThinking) return;
+            moveStack.pop(); // Remove AI or player move
+            if (moveStack.length > 0) {
+                game.load(moveStack[moveStack.length - 1].fen);
+            } else {
+                game.reset();
             }
+            selectedSquare = null;
+            updateBoard();
         }
 
         // Toggle notation visibility
@@ -313,11 +349,18 @@
             }
         }
 
-        // Initialize the game
-        createBoard();
-        stockfish.postMessage('uci'); // Initialize Stockfish (no API key needed)
-        setDifficulty(15); // Set default to highest difficulty
-        updateStatus();
+        // Show error message
+        function showError(message) {
+            const errorDiv = document.getElementById('error-message');
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+            console.error(message);
+        }
+
+        // Initialize Stockfish with error handling
+        stockfish.onerror = function(error) {
+            showError('Stockfish Web Worker error: ' + error.message);
+        };
     </script>
 </body>
 </html>
