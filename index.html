@@ -137,13 +137,18 @@
         document.addEventListener('DOMContentLoaded', () => {
             try {
                 game = new Chess();
-                // Attempt to create Web Worker with detailed debugging
+                // Attempt to create Web Worker with detailed debugging and fallback
                 try {
                     stockfish = new Worker('/stockfish.js');
                     logDebug('Attempting to load Stockfish Web Worker at /stockfish.js...');
+                    
+                    // Test if Worker is loaded by sending a simple message
+                    stockfish.postMessage('isready');
                 } catch (workerError) {
                     showError(`Failed to load Stockfish Web Worker: ${workerError.message}. Ensure stockfish.js is in the public directory and accessible at /stockfish.js.`);
                     logDebug(`Worker error details: ${JSON.stringify(workerError)}`);
+                    // Fallback: Try loading Stockfish as a script (if Worker fails due to environment restrictions)
+                    loadStockfishAsScript();
                     return;
                 }
 
@@ -158,6 +163,8 @@
                 stockfish.onerror = function(error) {
                     showError(`Stockfish Web Worker error: ${error.message || 'Unknown error'}. Check if stockfish.js is correctly hosted and loaded.`);
                     logDebug(`Stockfish error details: ${JSON.stringify(error)}`);
+                    // Attempt to reload Stockfish as a script if Worker fails
+                    loadStockfishAsScript();
                 };
                 stockfish.onmessageerror = function(error) {
                     showError(`Stockfish message error: ${error.message || 'Unknown message error'}`);
@@ -174,6 +181,33 @@
                 logDebug(`Global initialization error: ${JSON.stringify(error)}`);
             }
         });
+
+        // Fallback: Load Stockfish as a regular script if Web Worker fails
+        function loadStockfishAsScript() {
+            logDebug('Attempting to load Stockfish as a regular script due to Web Worker failure...');
+            const script = document.createElement('script');
+            script.src = '/stockfish.js';
+            script.onload = () => {
+                logDebug('Stockfish loaded as script. Initializing manually...');
+                stockfish = {
+                    postMessage: (message) => {
+                        if (window.Stockfish) {
+                            window.Stockfish(message, (response) => handleStockfishMessage({ data: response }));
+                        } else {
+                            showError('Stockfish script loaded but not initialized properly.');
+                            logDebug('Stockfish script initialization failed.');
+                        }
+                    },
+                    terminate: () => {}
+                };
+                stockfish.postMessage('uci');
+            };
+            script.onerror = (error) => {
+                showError(`Failed to load Stockfish as script: ${error.message}. Ensure stockfish.js is accessible.`);
+                logDebug(`Script load error: ${JSON.stringify(error)}`);
+            };
+            document.body.appendChild(script);
+        }
 
         // Map of chess piece types to Unicode symbols
         const pieceSymbols = {
@@ -294,32 +328,43 @@
         // Set AI difficulty level
         function setDifficulty(level) {
             if (!stockfish) {
-                showError('Stockfish not initialized. Check Web Worker setup.');
+                showError('Stockfish not initialized. Check Web Worker or script setup.');
                 logDebug('Stockfish is null or undefined.');
                 return;
             }
             aiDifficulty = parseInt(level);
-            stockfish.postMessage(`setoption name Skill Level value ${aiDifficulty}`);
+            if (stockfish.postMessage) {
+                stockfish.postMessage(`setoption name Skill Level value ${aiDifficulty}`);
+            } else if (window.Stockfish) {
+                window.Stockfish(`setoption name Skill Level value ${aiDifficulty}`, () => {});
+            }
             document.getElementById('difficulty-select').value = level;
             logDebug(`AI difficulty set to level ${aiDifficulty}`);
         }
 
         // Get AI move from Stockfish
         function getAIMove() {
-            if (!stockfish) {
+            if (!stockfish && !window.Stockfish) {
                 showError('Stockfish AI is not loaded. Please check your setup.');
                 isAIThinking = false;
-                logDebug('Stockfish Worker not available for AI move.');
+                logDebug('Stockfish Worker and script not available for AI move.');
                 return;
             }
-            stockfish.postMessage('position fen ' + game.fen());
-            stockfish.postMessage('go depth 15'); // Use fixed depth, adjusted by Skill Level
-            logDebug('Requested AI move with FEN: ' + game.fen());
+            const fen = game.fen();
+            if (stockfish.postMessage) {
+                stockfish.postMessage('position fen ' + fen);
+                stockfish.postMessage('go depth 15'); // Use fixed depth, adjusted by Skill Level
+                logDebug('Requested AI move with FEN (Worker): ' + fen);
+            } else if (window.Stockfish) {
+                window.Stockfish('position fen ' + fen, () => {});
+                window.Stockfish('go depth 15', (response) => handleStockfishMessage({ data: response }));
+                logDebug('Requested AI move with FEN (Script): ' + fen);
+            }
         }
 
         // Handle Stockfish responses
         function handleStockfishMessage(event) {
-            const message = event.data;
+            const message = event.data || event;
             logDebug(`Stockfish response: ${message}`);
             if (message.startsWith('bestmove')) {
                 const bestMove = message.split(' ')[1];
@@ -346,7 +391,7 @@
 
         // Start a new game
         function newGame() {
-            if (!game || !stockfish) {
+            if (!game || (!stockfish && !window.Stockfish)) {
                 showError('Game initialization failed. Please refresh the page or check stockfish.js.');
                 logDebug('Game or Stockfish not initialized for new game.');
                 return;
@@ -356,7 +401,11 @@
             selectedSquare = null;
             isAIThinking = false;
             createBoard();
-            stockfish.postMessage('ucinewgame');
+            if (stockfish.postMessage) {
+                stockfish.postMessage('ucinewgame');
+            } else if (window.Stockfish) {
+                window.Stockfish('ucinewgame', () => {});
+            }
             updateStatus();
             logDebug('New game started with Stockfish reset.');
         }
