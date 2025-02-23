@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Chess vs AI (No API)</title>
+    <title>Chess vs AI (Stockfish)</title>
     <style>
         body {
             background-color: #1e2a44;
@@ -112,22 +112,20 @@
         </select>
     </div>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+    <script src="https://unpkg.com/stockfish-js@0.12.0/stockfish.js"></script>
     <script>
         const game = new Chess();
+        const stockfish = new Worker('https://unpkg.com/stockfish-js@0.12.0/stockfish.js');
         let selectedSquare = null;
         let showNotation = false;
-        let aiDifficulty = 15; // Default to highest difficulty (deepest search)
+        let aiDifficulty = 15; // Default to highest difficulty
+        let isAIThinking = false;
         let moveStack = []; // Track moves for undo
 
         // Map of chess piece types to Unicode symbols
         const pieceSymbols = {
             'P': '♙', 'R': '♖', 'N': '♘', 'B': '♗', 'Q': '♕', 'K': '♔', // White pieces
             'p': '♟', 'r': '♜', 'n': '♞', 'b': '♝', 'q': '♛', 'k': '♚'  // Black pieces
-        };
-
-        // Piece values for evaluation
-        const pieceValues = {
-            'p': 100, 'n': 320, 'b': 330, 'r': 500, 'q': 900, 'k': 20000
         };
 
         // Create the chessboard
@@ -175,7 +173,7 @@
 
         // Handle square clicks for piece movement
         function handleSquareClick(e) {
-            if (game.game_over()) return;
+            if (game.game_over() || isAIThinking) return;
 
             const pos = e.currentTarget.dataset.pos;
             const piece = game.get(pos);
@@ -185,12 +183,14 @@
             if (selectedSquare) {
                 const move = game.move({ from: selectedSquare, to: pos, promotion: 'q' });
                 if (move) {
-                    moveStack.push({ fen: game.fen(), move: move.san }); // Store SAN for easier tracking
+                    moveStack.push({ fen: game.fen(), move: move.san });
                     updateBoard();
                     clearHighlights();
                     selectedSquare = null;
                     if (!game.game_over()) {
-                        setTimeout(makeAIMove, 100); // AI moves after player's move
+                        isAIThinking = true;
+                        updateStatus();
+                        setTimeout(getAIMove, 100); // AI moves after player's move
                     }
                 } else {
                     clearHighlights();
@@ -231,112 +231,49 @@
         // Set AI difficulty level
         function setDifficulty(level) {
             aiDifficulty = parseInt(level);
+            stockfish.postMessage(`setoption name Skill Level value ${aiDifficulty}`); // No API key needed
             document.getElementById('difficulty-select').value = level;
         }
 
-        // AI move using minimax with alpha-beta pruning
-        function makeAIMove() {
-            const depth = aiDifficulty; // Use difficulty level as search depth
-            const bestMove = findBestMove(depth);
-            if (bestMove) {
-                game.move(bestMove);
-                moveStack.push({ fen: game.fen(), move: bestMove });
-                updateBoard();
-                if (game.in_checkmate()) {
-                    alert('Checkmate! ' + (game.turn() === 'w' ? 'Black' : 'White') + ' wins!');
-                } else if (game.in_stalemate() || game.in_draw()) {
-                    alert('Game ended in a draw!');
-                }
-            }
+        // Get AI move from Stockfish
+        function getAIMove() {
+            stockfish.postMessage('position fen ' + game.fen());
+            stockfish.postMessage('go depth 15'); // Use fixed depth, adjusted by Skill Level
         }
 
-        // Find the best move for AI using minimax with alpha-beta pruning
-        function findBestMove(depth) {
-            let bestMove = null;
-            let bestValue = -Infinity;
-            const moves = game.moves({ verbose: true }); // Get verbose moves for SAN format
-
-            for (const move of moves) {
-                game.move(move.san); // Use SAN format for compatibility with Chess.js
-                const value = minimax(depth - 1, -Infinity, Infinity, false);
-                game.undo();
-                if (value > bestValue) {
-                    bestValue = value;
-                    bestMove = move.san; // Store as SAN string for game.move()
-                }
-            }
-            return bestMove;
-        }
-
-        // Minimax algorithm with alpha-beta pruning
-        function minimax(depth, alpha, beta, maximizingPlayer) {
-            if (depth === 0 || game.game_over()) {
-                return evaluateBoard();
-            }
-
-            const moves = game.moves();
-            if (maximizingPlayer) {
-                let maxEval = -Infinity;
-                for (const move of moves) {
-                    game.move(move);
-                    const eval = minimax(depth - 1, alpha, beta, false);
-                    game.undo();
-                    maxEval = Math.max(maxEval, eval);
-                    alpha = Math.max(alpha, eval);
-                    if (beta <= alpha) break;
-                }
-                return maxEval;
-            } else {
-                let minEval = Infinity;
-                for (const move of moves) {
-                    game.move(move);
-                    const eval = minimax(depth - 1, alpha, beta, true);
-                    game.undo();
-                    minEval = Math.min(minEval, eval);
-                    beta = Math.min(beta, eval);
-                    if (beta <= alpha) break;
-                }
-                return minEval;
-            }
-        }
-
-        // Evaluate the board position
-        function evaluateBoard() {
-            let score = 0;
-            const boardState = game.board();
-
-            for (let row = 0; row < 8; row++) {
-                for (let col = 0; col < 8; col++) {
-                    const piece = boardState[row][col];
-                    if (piece) {
-                        const value = pieceValues[piece.type];
-                        score += piece.color === 'w' ? value : -value;
+        // Handle Stockfish responses
+        stockfish.onmessage = function(event) {
+            const message = event.data;
+            if (message.startsWith('bestmove')) {
+                const bestMove = message.split(' ')[1];
+                if (bestMove && bestMove !== '(none)') {
+                    game.move(bestMove);
+                    moveStack.push({ fen: game.fen(), move: bestMove });
+                    updateBoard();
+                    isAIThinking = false;
+                    if (game.in_checkmate()) {
+                        alert('Checkmate! ' + (game.turn() === 'w' ? 'Black' : 'White') + ' wins!');
+                    } else if (game.in_stalemate() || game.in_draw()) {
+                        alert('Game ended in a draw!');
                     }
                 }
             }
-
-            if (game.in_checkmate()) {
-                return game.turn() === 'w' ? -100000 : 100000;
-            }
-            if (game.in_stalemate() || game.in_draw()) {
-                return 0;
-            }
-
-            return score;
-        }
+        };
 
         // Start a new game
         function newGame() {
             game.reset();
             moveStack = []; // Clear move history
             selectedSquare = null;
+            isAIThinking = false;
             createBoard();
+            stockfish.postMessage('ucinewgame'); // No API key needed
             updateStatus();
         }
 
         // Undo the last move
         function undoMove() {
-            if (moveStack.length > 0) {
+            if (moveStack.length > 0 && !isAIThinking) {
                 moveStack.pop(); // Remove AI or player move
                 if (moveStack.length > 0) {
                     game.load(moveStack[moveStack.length - 1].fen);
@@ -367,6 +304,9 @@
                 statusDiv.textContent = 'Draw.';
             } else {
                 statusDiv.textContent = `${game.turn() === 'w' ? 'White' : 'Black'} to move`;
+                if (isAIThinking) {
+                    statusDiv.textContent = "AI is thinking...";
+                }
                 if (game.in_check()) {
                     statusDiv.textContent += ' (in check)';
                 }
@@ -375,6 +315,7 @@
 
         // Initialize the game
         createBoard();
+        stockfish.postMessage('uci'); // Initialize Stockfish (no API key needed)
         setDifficulty(15); // Set default to highest difficulty
         updateStatus();
     </script>
