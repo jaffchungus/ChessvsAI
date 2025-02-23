@@ -16,6 +16,7 @@
         }
         .game-container {
             text-align: center;
+            padding: 20px;
         }
         #chessboard {
             display: grid;
@@ -75,15 +76,19 @@
             font-size: 16px;
         }
         #error-message {
-            color: red;
+            color: #ff4444;
             margin-top: 10px;
+            font-size: 16px;
             display: none;
+            background-color: rgba(0, 0, 0, 0.7);
+            padding: 10px;
+            border-radius: 5px;
         }
     </style>
 </head>
 <body>
     <div class="game-container">
-        <div id="status"></div>
+        <div id="status">Loading Stockfish AI...</div>
         <div id="chessboard"></div>
         <div class="controls">
             <button onclick="newGame()">NEW GAME</button>
@@ -99,46 +104,58 @@
         <div id="error-message"></div>
     </div>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
-    <script src="https://unpkg.com/stockfish-js@0.12.0/stockfish.js"></script>
     <script>
         let game, stockfish, selectedSquare, showNotation, aiDifficulty, isAIThinking, moveStack;
-
-        // Initialize game and AI on page load
-        document.addEventListener('DOMContentLoaded', () => {
-            try {
-                game = new Chess();
-                stockfish = new Worker('https://unpkg.com/stockfish-js@0.12.0/stockfish.js');
-                selectedSquare = null;
-                showNotation = false;
-                aiDifficulty = 15; // Default to highest difficulty
-                isAIThinking = false;
-                moveStack = []; // Track moves for undo
-
-                // Initialize Stockfish with error handling
-                stockfish.onmessage = handleStockfishMessage;
-                stockfish.onerror = (error) => {
-                    showError(`Stockfish Web Worker error: ${error.message || 'Unknown error'}. Ensure internet connection or host stockfish.js locally.`);
-                };
-                stockfish.onmessageerror = (error) => {
-                    showError(`Stockfish message error: ${error.message || 'Unknown message error'}`);
-                };
-
-                stockfish.postMessage('uci');
-                stockfish.postMessage('isready'); // Confirm Stockfish is ready
-                setDifficulty(aiDifficulty);
-                createBoard();
-                updateStatus();
-            } catch (error) {
-                showError(`Initialization failed: ${error.message}. Check console for details.`);
-                console.error(error);
-            }
-        });
 
         // Chess piece symbols
         const pieceSymbols = {
             'P': '♙', 'R': '♖', 'N': '♘', 'B': '♗', 'Q': '♕', 'K': '♔',
             'p': '♟', 'r': '♜', 'n': '♞', 'b': '♝', 'q': '♛', 'k': '♚'
         };
+
+        // Initialize game and AI on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            try {
+                game = new Chess();
+                moveStack = [];
+                selectedSquare = null;
+                showNotation = false;
+                aiDifficulty = 15; // Default to highest difficulty
+                isAIThinking = false;
+
+                // Initialize Stockfish locally
+                stockfish = new Worker('stockfish.js');
+                stockfish.onmessage = handleStockfishMessage;
+                stockfish.onerror = (error) => {
+                    showError(`Stockfish failed to load: ${error.message || 'Unknown error'}. Ensure stockfish.js is in the same directory.`);
+                };
+                stockfish.postMessage('uci');
+                stockfish.postMessage('isready'); // Wait for confirmation
+            } catch (error) {
+                showError(`Initialization failed: ${error.message}. Check console for details.`);
+                console.error(error);
+            }
+        });
+
+        // Handle Stockfish messages
+        function handleStockfishMessage(event) {
+            const message = event.data;
+            if (message === 'readyok') {
+                console.log('Stockfish initialized successfully.');
+                setDifficulty(aiDifficulty);
+                createBoard();
+                updateStatus();
+            } else if (message.startsWith('bestmove')) {
+                const bestMove = message.split(' ')[1];
+                if (bestMove && bestMove !== '(none)') {
+                    game.move(bestMove);
+                    moveStack.push({ fen: game.fen(), move: bestMove });
+                    updateBoard();
+                    isAIThinking = false;
+                    checkGameOver();
+                }
+            }
+        }
 
         // Create chessboard
         function createBoard() {
@@ -192,7 +209,7 @@
                     if (!game.game_over()) {
                         isAIThinking = true;
                         updateStatus();
-                        setTimeout(getAIMove, 100);
+                        setTimeout(getAIMove, 100); // Small delay for smoother UI
                     }
                 } else {
                     clearHighlights();
@@ -238,29 +255,12 @@
         // Request AI move
         function getAIMove() {
             if (!stockfish) {
-                showError('Stockfish AI not loaded. Ensure internet connection or host stockfish.js locally.');
+                showError('Stockfish AI not available. Please refresh and ensure stockfish.js is loaded.');
                 isAIThinking = false;
                 return;
             }
             stockfish.postMessage(`position fen ${game.fen()}`);
             stockfish.postMessage('go depth 15');
-        }
-
-        // Handle Stockfish messages
-        function handleStockfishMessage(event) {
-            const message = event.data;
-            if (message === 'readyok') {
-                console.log('Stockfish ready.');
-            } else if (message.startsWith('bestmove')) {
-                const bestMove = message.split(' ')[1];
-                if (bestMove && bestMove !== '(none)') {
-                    game.move(bestMove);
-                    moveStack.push({ fen: game.fen(), move: bestMove });
-                    updateBoard();
-                    isAIThinking = false;
-                    checkGameOver();
-                }
-            }
         }
 
         // Check game over conditions
@@ -288,7 +288,7 @@
             if (moveStack.length >= 2 && !isAIThinking) {
                 moveStack.pop(); // Remove AI move
                 moveStack.pop(); // Remove player move
-                game.load(moveStack.length ? moveStack[moveStack.length - 1].fen : game.startingFen());
+                game.load(moveStack.length ? moveStack[moveStack.length - 1].fen : 'rnbqkbnr/pppppppp/5n2/8/8/5N2/PPPPPPPP/RNBQKB1R w KQkq - 0 1');
                 selectedSquare = null;
                 updateBoard();
             }
@@ -303,6 +303,10 @@
         // Update status
         function updateStatus() {
             const statusDiv = document.getElementById('status');
+            if (!game) {
+                statusDiv.textContent = 'Game not initialized.';
+                return;
+            }
             if (game.game_over()) {
                 statusDiv.textContent = game.in_checkmate() ? 
                     `Checkmate! ${game.turn() === 'w' ? 'Black' : 'White'} wins!` : 
@@ -318,6 +322,7 @@
             const errorDiv = document.getElementById('error-message');
             errorDiv.textContent = message;
             errorDiv.style.display = 'block';
+            setTimeout(() => errorDiv.style.display = 'none', 5000); // Auto-hide after 5 seconds
         }
     </script>
 </body>
