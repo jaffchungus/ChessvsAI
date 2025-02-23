@@ -120,26 +120,37 @@
         <div id="error-message"></div>
     </div>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
-    <script src="/stockfish.js"></script> <!-- Updated to local path -->
+    <script src="/stockfish.js"></script> <!-- Local path; ensure this file exists in your public directory -->
     <script>
         let game, stockfish, selectedSquare, showNotation, aiDifficulty, isAIThinking, moveStack;
 
-        // Initialize game and AI on page load
+        // Initialize game and AI on page load with error handling
         document.addEventListener('DOMContentLoaded', () => {
             try {
                 game = new Chess();
-                stockfish = new Worker('/stockfish.js'); // Use local path
+                // Attempt to create Web Worker with fallback for debugging
+                try {
+                    stockfish = new Worker('/stockfish.js');
+                } catch (workerError) {
+                    showError(`Failed to load Stockfish Web Worker: ${workerError.message}. Ensure stockfish.js is in the public directory and accessible at /stockfish.js.`);
+                    return;
+                }
+
                 selectedSquare = null;
                 showNotation = false;
                 aiDifficulty = 15; // Default to highest difficulty
                 isAIThinking = false;
                 moveStack = []; // Track moves for undo
 
-                // Initialize Stockfish
+                // Initialize Stockfish with error handling
                 stockfish.onmessage = handleStockfishMessage;
                 stockfish.onerror = function(error) {
-                    showError('Stockfish Web Worker error: ' + error.message);
+                    showError(`Stockfish Web Worker error: ${error.message || 'Unknown error'}. Check if stockfish.js is correctly hosted and loaded.`);
                 };
+                stockfish.onmessageerror = function(error) {
+                    showError(`Stockfish message error: ${error.message || 'Unknown message error'}`);
+                };
+
                 stockfish.postMessage('uci');
                 setDifficulty(15); // Set default difficulty
                 createBoard();
@@ -158,6 +169,10 @@
         // Create the chessboard
         function createBoard() {
             const board = document.getElementById('chessboard');
+            if (!board) {
+                showError('Chessboard element not found. Check HTML structure.');
+                return;
+            }
             board.innerHTML = '';
             for (let row = 0; row < 8; row++) {
                 for (let col = 0; col < 8; col++) {
@@ -184,7 +199,10 @@
 
         // Update the board with current pieces and notation
         function updateBoard() {
-            if (!game) return;
+            if (!game) {
+                showError('Game object not initialized. Please refresh the page.');
+                return;
+            }
             const boardState = game.board();
             for (let row = 0; row < 8; row++) {
                 for (let col = 0; col < 8; col++) {
@@ -258,7 +276,10 @@
 
         // Set AI difficulty level
         function setDifficulty(level) {
-            if (!stockfish) return;
+            if (!stockfish) {
+                showError('Stockfish not initialized. Check Web Worker setup.');
+                return;
+            }
             aiDifficulty = parseInt(level);
             stockfish.postMessage(`setoption name Skill Level value ${aiDifficulty}`);
             document.getElementById('difficulty-select').value = level;
@@ -267,7 +288,7 @@
         // Get AI move from Stockfish
         function getAIMove() {
             if (!stockfish) {
-                showError('Stockfish AI is not loaded. Please check your internet connection or ensure stockfish.js is hosted locally.');
+                showError('Stockfish AI is not loaded. Please check your setup.');
                 isAIThinking = false;
                 return;
             }
@@ -294,6 +315,8 @@
             } else if (message.startsWith('error')) {
                 showError('Stockfish error: ' + message);
                 isAIThinking = false;
+            } else if (message === 'readyok') {
+                console.log('Stockfish is ready.');
             }
         }
 
