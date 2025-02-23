@@ -92,7 +92,10 @@
         #debug-info {
             color: yellow;
             margin-top: 10px;
+            max-height: 200px;
+            overflow-y: auto;
             display: none;
+            white-space: pre-wrap;
         }
     </style>
 </head>
@@ -162,7 +165,7 @@
                 };
 
                 stockfish.postMessage('uci');
-                logDebug('Stockfish initialized with UCI command.');
+                logDebug('Stockfish initialized with UCI command. Waiting for "readyok"...');
                 setDifficulty(15); // Set default difficulty
                 createBoard();
                 updateStatus();
@@ -335,7 +338,9 @@
                 showError('Stockfish error: ' + message);
                 isAIThinking = false;
             } else if (message === 'readyok') {
-                logDebug('Stockfish is ready.');
+                logDebug('Stockfish is ready and initialized successfully.');
+            } else if (message === 'uciok') {
+                logDebug('Stockfish UCI protocol initialized successfully.');
             }
         }
 
@@ -408,10 +413,11 @@
             console.error(message);
         }
 
-        // Log debug information
+        // Log debug information with scrollable output
         function logDebug(message) {
             const debugDiv = document.getElementById('debug-info');
-            debugDiv.textContent += `${message}\n`;
+            debugDiv.textContent += `${new Date().toISOString()} - ${message}\n`;
+            debugDiv.scrollTop = debugDiv.scrollHeight; // Auto-scroll to the bottom
             debugDiv.style.display = 'block';
             console.log(`Debug: ${message}`);
         }
