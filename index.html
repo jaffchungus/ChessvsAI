@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Chess Game</title>
+  <title>Chess Game with AI</title>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -92,11 +92,26 @@
       padding: 10px;
       border-radius: 5px;
     }
+
+    .level-select {
+      margin-top: 10px;
+    }
+
+    .level-select label {
+      font-size: 16px;
+      margin-right: 10px;
+    }
+
+    .level-select select {
+      padding: 5px;
+      font-size: 16px;
+      border-radius: 5px;
+    }
   </style>
 </head>
 <body>
   <div class="container">
-    <h1>Chess Game</h1>
+    <h1>Chess Game with AI</h1>
     <div class="timers">
       <div class="timer" id="white-timer">White: 300s</div>
       <div class="timer" id="black-timer">Black: 300s</div>
@@ -104,6 +119,26 @@
     <div class="board" id="board"></div>
     <div class="controls">
       <button onclick="resetGame()">Reset Game</button>
+      <div class="level-select">
+        <label for="ai-level">AI Level (1-15):</label>
+        <select id="ai-level">
+          <option value="1">1 (Easiest)</option>
+          <option value="2">2</option>
+          <option value="3">3</option>
+          <option value="4">4</option>
+          <option value="5">5</option>
+          <option value="6">6</option>
+          <option value="7">7</option>
+          <option value="8">8</option>
+          <option value="9">9</option>
+          <option value="10">10</option>
+          <option value="11">11</option>
+          <option value="12">12</option>
+          <option value="13">13</option>
+          <option value="14">14</option>
+          <option value="15">15 (Grandmaster)</option>
+        </select>
+      </div>
     </div>
     <div class="move-history">
       <h3>Move History</h3>
@@ -111,18 +146,23 @@
     </div>
   </div>
 
+  <!-- Stockfish.js Library -->
+  <script src="https://cdn.jsdelivr.net/npm/stockfish.js@0.1.0/stockfish.js"></script>
   <script>
     const boardElement = document.getElementById('board');
     const whiteTimerElement = document.getElementById('white-timer');
     const blackTimerElement = document.getElementById('black-timer');
     const moveHistoryElement = document.getElementById('move-history');
+    const aiLevelSelect = document.getElementById('ai-level');
 
-    let board = Array(8).fill().map(() => Array(8).fill(null));
+    let board = null;
     let currentPlayer = 'white';
     let whiteTime = 300;
     let blackTime = 300;
     let timerInterval;
     let moveHistory = [];
+    let stockfish = new Worker('https://cdn.jsdelivr.net/npm/stockfish.js@0.1.0/stockfish.wasm.js');
+    let game = new Chess();
 
     // Initialize the board
     function initBoard() {
@@ -138,50 +178,50 @@
           boardElement.appendChild(square);
         }
       }
+      updateBoard();
+    }
+
+    // Update the board with pieces
+    function updateBoard() {
+      for (let row = 0; row < 8; row++) {
+        for (let col = 0; col < 8; col++) {
+          const square = document.querySelector(`.square[data-row="${row}"][data-col="${col}"]`);
+          const piece = game.get([row, col]);
+          square.textContent = piece ? piece.toUpperCase() : '';
+        }
+      }
     }
 
     // Handle square click
     function handleSquareClick(row, col) {
-      const square = board[row][col];
-      if (square) {
-        highlightMoves(row, col);
-      } else {
-        movePiece(row, col);
+      if (currentPlayer === 'black') return; // AI's turn
+      const move = game.move({ from: [row, col], to: [row, col] }); // Placeholder logic
+      if (move) {
+        moveHistory.push(`${currentPlayer} moved from ${move.from} to ${move.to}`);
+        updateMoveHistory();
+        switchPlayer();
+        makeAIMove();
       }
     }
 
-    // Highlight possible moves
-    function highlightMoves(row, col) {
-      clearHighlights();
-      // Example: Highlight all adjacent squares
-      const directions = [
-        [-1, -1], [-1, 0], [-1, 1],
-        [0, -1],          [0, 1],
-        [1, -1],  [1, 0], [1, 1]
-      ];
-      directions.forEach(([dx, dy]) => {
-        const newRow = row + dx;
-        const newCol = col + dy;
-        if (newRow >= 0 && newRow < 8 && newCol >= 0 && newCol < 8) {
-          const square = document.querySelector(`.square[data-row="${newRow}"][data-col="${newCol}"]`);
-          square.classList.add('highlight');
+    // Make AI move
+    function makeAIMove() {
+      const level = parseInt(aiLevelSelect.value);
+      stockfish.postMessage(`setoption name Skill Level value ${level}`);
+      stockfish.postMessage('position fen ' + game.fen());
+      stockfish.postMessage('go depth 10');
+
+      stockfish.onmessage = (event) => {
+        const message = event.data;
+        if (message.startsWith('bestmove')) {
+          const move = message.split(' ')[1];
+          game.move(move);
+          moveHistory.push(`AI moved ${move}`);
+          updateMoveHistory();
+          updateBoard();
+          switchPlayer();
         }
-      });
-    }
-
-    // Clear highlights
-    function clearHighlights() {
-      document.querySelectorAll('.square.highlight').forEach(square => {
-        square.classList.remove('highlight');
-      });
-    }
-
-    // Move piece
-    function movePiece(row, col) {
-      // Example: Move logic (placeholder)
-      moveHistory.push(`${currentPlayer} moved to ${row}, ${col}`);
-      updateMoveHistory();
-      switchPlayer();
+      };
     }
 
     // Switch player
@@ -228,6 +268,7 @@
       blackTimerElement.textContent = `Black: ${blackTime}s`;
       moveHistory = [];
       updateMoveHistory();
+      game.reset();
       initBoard();
     }
 
