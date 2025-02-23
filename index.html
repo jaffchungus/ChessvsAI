@@ -272,7 +272,7 @@ function setDifficulty(level) {
     document.getElementById('difficulty-select').value = level;
 }
 
-// Enhanced evaluation function
+// Simplified evaluation function
 function evaluateBoard(tempGame) {
     const board = tempGame.board();
     let score = 0;
@@ -288,20 +288,6 @@ function evaluateBoard(tempGame) {
         }
     }
 
-    // Mobility
-    const moves = tempGame.moves({ verbose: true });
-    score += tempGame.turn() === 'w' ? moves.length * 5 : -moves.length * 5;
-
-    // Center control
-    const centerSquares = ['d4', 'd5', 'e4', 'e5'];
-    centerSquares.forEach(square => {
-        const piece = tempGame.get(square);
-        if (piece) {
-            if (piece.color === 'w' && (piece.type === 'p' || piece.type === 'n')) score += 20;
-            if (piece.color === 'b' && (piece.type === 'p' || piece.type === 'n')) score -= 20;
-        }
-    });
-
     // Check bonus
     if (tempGame.in_check()) {
         score += tempGame.turn() === 'w' ? -50 : 50;
@@ -310,11 +296,11 @@ function evaluateBoard(tempGame) {
     return score;
 }
 
-// Move ordering for alpha-beta efficiency
+// Move ordering for efficiency
 function orderMoves(moves) {
     return moves.sort((a, b) => {
-        const aScore = (a.captured ? pieceValues[a.captured] : 0) + (a.flags.includes('k') || a.flags.includes('q') ? 1000 : 0);
-        const bScore = (b.captured ? pieceValues[b.captured] : 0) + (b.flags.includes('k') || b.flags.includes('q') ? 1000 : 0);
+        const aScore = (a.captured ? pieceValues[a.captured] : 0) + (a.san.includes('+') ? 50 : 0) + (a.promotion ? 100 : 0);
+        const bScore = (b.captured ? pieceValues[b.captured] : 0) + (b.san.includes('+') ? 50 : 0) + (b.promotion ? 100 : 0);
         return bScore - aScore; // Sort descending
     });
 }
@@ -394,23 +380,21 @@ function getAIMove() {
             evaluatedMoves[0].move :
             moves[Math.floor(Math.random() * moves.length)];
     } else { // Level 15
-        const depth = 3; // Reduced from 4 for speed
-        const startTime = Date.now();
-        const timeLimit = 2000; // 2 seconds max
+        const depth = 2; // Fast but still tactical
+        const promisingMoves = orderMoves(moves).slice(0, 5); // Top 5 moves only
 
-        // Pre-filter promising moves (captures, checks, promotions)
-        const promisingMoves = orderMoves(moves).slice(0, Math.min(10, moves.length));
-
-        const evaluatedMoves = promisingMoves.map(move => {
-            const tempGame = new Chess(game.fen());
-            tempGame.move(move);
-            const score = minimax(tempGame, depth - 1, -Infinity, Infinity, game.turn() === 'b');
-            if (Date.now() - startTime > timeLimit) throw new Error('Time limit exceeded');
-            return { move, value: score };
-        });
-
-        evaluatedMoves.sort((a, b) => game.turn() === 'w' ? b.value - a.value : a.value - b.value);
-        bestMove = evaluatedMoves[0].move; // Always pick the best move
+        if (promisingMoves.length === 0) {
+            bestMove = moves[0]; // Fallback
+        } else {
+            const evaluatedMoves = promisingMoves.map(move => {
+                const tempGame = new Chess(game.fen());
+                tempGame.move(move);
+                const score = minimax(tempGame, depth - 1, -Infinity, Infinity, game.turn() === 'b');
+                return { move, value: score };
+            });
+            evaluatedMoves.sort((a, b) => game.turn() === 'w' ? b.value - a.value : a.value - b.value);
+            bestMove = evaluatedMoves[0].move; // Always best move
+        }
     }
 
     game.move(bestMove);
