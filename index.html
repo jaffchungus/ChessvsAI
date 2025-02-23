@@ -146,14 +146,11 @@
         <div id="error-message"></div>
     </div>
 
-    <!-- Import Chess.js and Stockfish.js -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
-    <script src="https://unpkg.com/stockfish@15.1.0/dist/stockfish.js"></script>
     <script>
     let game, selectedSquare, showNotation, aiDifficulty, isAIThinking, moveStack;
     let whiteTime = 600, blackTime = 600; // 10 minutes in seconds
     let timerOn = false, timerInterval = null, playerSide = 'w'; // Default to White
-    let stockfish;
 
     // Chess piece symbols
     const pieceSymbols = {
@@ -161,26 +158,21 @@
         'p': '♟', 'r': '♜', 'n': '♞', 'b': '♝', 'q': '♛', 'k': '♚'
     };
 
-    // Piece values for lower levels
+    // Piece values for evaluation
     const pieceValues = { 'p': 100, 'n': 320, 'b': 330, 'r': 500, 'q': 900, 'k': 20000 };
 
-    // Initialize game and Stockfish after scripts load
-    function initializeGame() {
+    // Initialize game on page load
+    window.onload = function() {
         game = new Chess();
         moveStack = [];
         selectedSquare = null;
         showNotation = false;
         aiDifficulty = 15; // Default to hardest level
         isAIThinking = false;
-        stockfish = new Worker('https://unpkg.com/stockfish@15.1.0/dist/stockfish.js');
-        stockfish.onerror = (e) => showError('Stockfish failed to load: ' + e.message);
         createBoard();
         updateStatus();
         updateTimerDisplay();
-    }
-
-    // Wait for DOM and scripts to load
-    window.onload = initializeGame;
+    };
 
     // Create chessboard with dynamic orientation
     function createBoard() {
@@ -204,13 +196,16 @@
         updateBoard();
         if (playerSide === 'b' && !isAIThinking && game.turn() === 'b') {
             isAIThinking = true;
-            setTimeout(getAIMove, 300); // AI moves first if player is Black
+            setTimeout(getAIMove, 300);
         }
     }
 
     // Update board state
     function updateBoard() {
-        if (!game) return;
+        if (!game) {
+            showError('Game not initialized');
+            return;
+        }
         const boardState = game.board();
         if (!boardState) {
             showError('Board state not initialized');
@@ -219,7 +214,7 @@
         for (let row = 0; row < 8; row++) {
             for (let col = 0; col < 8; col++) {
                 const square = document.querySelector(`[data-pos="${String.fromCharCode(97 + col)}${8 - row}"]`);
-                if (!square) continue; // Skip if square not found
+                if (!square) continue;
                 const pieceDiv = square.querySelector('.piece');
                 const notationSpan = square.querySelector('.notation');
                 const piece = boardState[row][col];
@@ -235,7 +230,7 @@
         if (!game || game.game_over() || isAIThinking) return;
         const pos = e.currentTarget.dataset.pos;
         const piece = game.get(pos);
-        if (game.turn() !== playerSide) return; // Only move player’s side
+        if (game.turn() !== playerSide) return;
 
         if (selectedSquare) {
             const move = game.move({ from: selectedSquare, to: pos, promotion: 'q' });
@@ -286,7 +281,7 @@
         document.getElementById('difficulty-select').value = level;
     }
 
-    // Simple evaluation for lower levels
+    // Evaluation function
     function evaluateBoard(tempGame) {
         const board = tempGame.board();
         let score = 0;
@@ -299,10 +294,112 @@
                 }
             }
         }
+        const moves = tempGame.moves({ verbose: true });
+        score += tempGame.turn() === 'w' ? moves.length * 5 : -moves.length * 5;
+        const centerSquares = ['d4', 'd5', 'e4', 'e5'];
+        centerSquares.forEach(square => {
+            const piece = tempGame.get(square);
+            if (piece) {
+                if (piece.color === 'w' && (piece.type === 'p' || piece.type === 'n')) score += 20;
+                if (piece.color === 'b' && (piece.type === 'p' || piece.type === 'n')) score -= 20;
+            }
+        });
+        if (tempGame.in_check()) {
+            score += tempGame.turn() === 'w' ? -50 : 50;
+        }
         return score;
     }
 
-    // AI move selection with Stockfish for Level 15
+    // Move ordering for efficiency
+    function orderMoves(moves) {
+        return moves.sort((a, b) => {
+            const aScore = (a.captured ? pieceValues[a.captured] : 0) + (a.san.includes('+') ? 50 : 0) + (a.promotion ? 100 : 0);
+            const bScore = (b.captured ? pieceValues[b.captured] : 0) + (b.san.includes('+') ? 50 : 0) + (b.promotion ? 100 : 0);
+            return bScore - aScore;
+        });
+    }
+
+    // Minimax with alpha-beta pruning
+    function minimax(tempGame, depth, alpha, beta, maximizingPlayer, startTime, timeLimit) {
+        if (depth === 0 || tempGame.game_over() || (Date.now() - startTime > timeLimit)) {
+            return evaluateBoard(tempGame);
+        }
+
+        const moves = orderMoves(tempGame.moves({ verbose: true }));
+        if (maximizingPlayer) {
+            let maxEval = -Infinity;
+            for (const move of moves) {
+                const newGame = new Chess(tempGame.fen());
+                newGame.move(move);
+                const evalScore = minimax(newGame, depth - 1, alpha, beta, false, startTime, timeLimit);
+                maxEval = Math.max(maxEval, evalScore);
+                alpha = Math.max(alpha, evalScore);
+                if (beta <= alpha || Date.now() - startTime > timeLimit) break;
+            }
+            return maxEval;
+        } else {
+            let minEval = Infinity;
+            for (const move of moves) {
+                const newGame = new Chess(tempGame.fen());
+                newGame.move(move);
+                const evalScore = minimax(newGame, depth - 1, alpha, beta, true, startTime, timeLimit);
+                minEval = Math.min(minEval, evalScore);
+                beta = Math.min(beta, evalScore);
+                if (beta <= alpha || Date.now() - startTime > timeLimit) break;
+            }
+            return minEval;
+        }
+    }
+
+    // Iterative deepening for Level 15
+    function getBestMove(tempGame) {
+        const startTime = Date.now();
+        const timeLimit = 1500; // 1.5 seconds
+        const maxDepth = 10; // Adjusted for speed, still strong
+        let bestMove = null;
+        let bestScore = game.turn() === 'w' ? -Infinity : Infinity;
+
+        const moves = orderMoves(tempGame.moves({ verbose: true }));
+        if (moves.length === 0) return moves[0];
+
+        for (let depth = 1; depth <= maxDepth; depth++) {
+            let alpha = -Infinity;
+            let beta = Infinity;
+            let currentBestMove = moves[0];
+            let currentBestScore = game.turn() === 'w' ? -Infinity : Infinity;
+
+            for (const move of moves) {
+                const newGame = new Chess(tempGame.fen());
+                newGame.move(move);
+                const score = minimax(newGame, depth - 1, alpha, beta, game.turn() === 'b', startTime, timeLimit);
+
+                if (game.turn() === 'w') {
+                    if (score > currentBestScore) {
+                        currentBestScore = score;
+                        currentBestMove = move;
+                    }
+                    alpha = Math.max(alpha, score);
+                } else {
+                    if (score < currentBestScore) {
+                        currentBestScore = score;
+                        currentBestMove = move;
+                    }
+                    beta = Math.min(beta, score);
+                }
+
+                if (Date.now() - startTime > timeLimit) break;
+            }
+
+            bestMove = currentBestMove;
+            bestScore = currentBestScore;
+
+            if (Date.now() - startTime > timeLimit) break;
+        }
+
+        return bestMove;
+    }
+
+    // AI move selection
     function getAIMove() {
         const moves = game.moves({ verbose: true });
         if (moves.length === 0) {
@@ -315,31 +412,17 @@
         const randomness = Math.max(0, 15 - aiDifficulty) * 0.15;
 
         if (aiDifficulty === 15) {
-            if (!stockfish) {
-                showError('Stockfish not initialized');
+            bestMove = getBestMove(game);
+            if (bestMove) {
+                game.move(bestMove);
+                moveStack.push({ fen: game.fen(), move: bestMove.san });
+                updateBoard();
                 isAIThinking = false;
-                return;
+                checkGameOver();
+            } else {
+                showError('No valid move found');
+                isAIThinking = false;
             }
-            stockfish.postMessage(`position fen ${game.fen()}`);
-            stockfish.postMessage("go movetime 1000"); // 1 second search
-
-            stockfish.onmessage = function(event) {
-                const message = event.data;
-                if (message.startsWith("bestmove")) {
-                    const moveStr = message.split(" ")[1];
-                    bestMove = moves.find(m => m.from + m.to === moveStr) || moves[0]; // Fallback to first legal move
-                    if (bestMove) {
-                        game.move(bestMove);
-                        moveStack.push({ fen: game.fen(), move: bestMove.san });
-                        updateBoard();
-                        isAIThinking = false;
-                        checkGameOver();
-                    } else {
-                        showError('No valid move found from Stockfish');
-                        isAIThinking = false;
-                    }
-                }
-            };
         } else if (aiDifficulty <= 3) {
             const evaluatedMoves = moves.map(move => ({
                 move,
@@ -505,7 +588,7 @@
     // Set player side
     function setPlayerSide(side) {
         playerSide = side;
-        newGame(); // Restart game with new side and flipped board
+        newGame();
     }
 
     // Show error
