@@ -99,35 +99,32 @@
         <div id="error-message"></div>
     </div>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+    <script src="https://unpkg.com/stockfish-js@0.12.0/stockfish.js"></script>
     <script>
         let game, stockfish, selectedSquare, showNotation, aiDifficulty, isAIThinking, moveStack;
 
         // Initialize game and AI on page load
-        document.addEventListener('DOMContentLoaded', async () => {
+        document.addEventListener('DOMContentLoaded', () => {
             try {
                 game = new Chess();
+                stockfish = new Worker('https://unpkg.com/stockfish-js@0.12.0/stockfish.js');
                 selectedSquare = null;
                 showNotation = false;
-                aiDifficulty = 15; // Default difficulty
+                aiDifficulty = 15; // Default to highest difficulty
                 isAIThinking = false;
-                moveStack = [];
+                moveStack = []; // Track moves for undo
 
-                // Verify stockfish.js availability before initializing
-                const stockfishPath = '/stockfish.js';
-                const response = await fetch(stockfishPath, { method: 'HEAD' });
-                if (!response.ok) {
-                    throw new Error(`stockfish.js not found at ${stockfishPath}. Ensure it's in the public directory.`);
-                }
-
-                // Initialize Stockfish Web Worker
-                stockfish = new Worker(stockfishPath);
+                // Initialize Stockfish with error handling
                 stockfish.onmessage = handleStockfishMessage;
                 stockfish.onerror = (error) => {
-                    showError(`Stockfish Web Worker error: ${error.message || 'Unknown error'}`);
+                    showError(`Stockfish Web Worker error: ${error.message || 'Unknown error'}. Ensure internet connection or host stockfish.js locally.`);
                 };
-                stockfish.postMessage('uci');
+                stockfish.onmessageerror = (error) => {
+                    showError(`Stockfish message error: ${error.message || 'Unknown message error'}`);
+                };
 
-                // Set default difficulty and create board
+                stockfish.postMessage('uci');
+                stockfish.postMessage('isready'); // Confirm Stockfish is ready
                 setDifficulty(aiDifficulty);
                 createBoard();
                 updateStatus();
@@ -241,7 +238,7 @@
         // Request AI move
         function getAIMove() {
             if (!stockfish) {
-                showError('Stockfish AI not loaded.');
+                showError('Stockfish AI not loaded. Ensure internet connection or host stockfish.js locally.');
                 isAIThinking = false;
                 return;
             }
