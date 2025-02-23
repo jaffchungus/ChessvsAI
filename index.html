@@ -5,107 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Chess vs Enhanced AI</title>
     <style>
-                body {
-            background-color: #1e2a44;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 100vh;
-            margin: 0;
-            font-family: Arial, sans-serif;
-        }
-        .game-container {
-            text-align: center;
-            padding: 20px;
-        }
-        #chessboard {
-            display: grid;
-            grid-template-columns: repeat(8, 60px);
-            grid-template-rows: repeat(8, 60px);
-            gap: 0;
-            margin: 0 auto;
-            border: 2px solid #fff;
-        }
-        .square {
-            width: 60px;
-            height: 60px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 40px;
-            position: relative;
-            font-family: "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif;
-        }
-        .light { background-color: #ebecd0; }
-        .dark { background-color: #779556; }
-        .selected { background-color: #ffeb3b !important; }
-        .valid-move { background-color: #baca44 !important; }
-        .notation {
-            position: absolute;
-            bottom: 2px;
-            right: 2px;
-            font-size: 12px;
-            color: #000;
-            display: none;
-        }
-        .controls {
-            margin-top: 20px;
-            display: flex;
-            justify-content: center;
-            gap: 10px;
-        }
-        button {
-            padding: 10px 20px;
-            background-color: #5c6bc0;
-            color: white;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: 16px;
-        }
-        button:hover { background-color: #4a5aa8; }
-        #status {
-            color: white;
-            text-align: center;
-            margin-bottom: 10px;
-            font-size: 18px;
-        }
-        .timer-container {
-            display: flex;
-            justify-content: space-between;
-            width: 480px; /* Matches chessboard width */
-            margin: 10px auto;
-        }
-        .timer {
-            background-color: #2c3e50;
-            color: white;
-            padding: 10px 20px;
-            border-radius: 8px;
-            font-size: 18px;
-            font-weight: bold;
-            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
-            min-width: 120px;
-            text-align: center;
-            transition: background-color 0.3s;
-        }
-        .timer.active {
-            background-color: #e74c3c; /* Red when ticking */
-        }
-        #difficulty-select, #side-select, #timer-toggle {
-            margin-top: 10px;
-            padding: 5px;
-            font-size: 16px;
-        }
-        #error-message {
-            color: #ff4444;
-            margin-top: 10px;
-            font-size: 16px;
-            display: none;
-            background-color: rgba(0, 0, 0, 0.7);
-            padding: 10px;
-            border-radius: 5px;
-        }
-        
         body {
             background-color: #1e2a44;
             display: flex;
@@ -254,7 +153,7 @@
     let game, selectedSquare, showNotation, aiDifficulty, isAIThinking, moveStack;
     let whiteTime = 600, blackTime = 600; // 10 minutes in seconds
     let timerOn = false, timerInterval = null, playerSide = 'w'; // Default to White
-    let stockfish = new Worker('https://unpkg.com/stockfish@15.1.0/dist/stockfish.js'); // Stockfish worker
+    let stockfish;
 
     // Chess piece symbols
     const pieceSymbols = {
@@ -265,18 +164,23 @@
     // Piece values for lower levels
     const pieceValues = { 'p': 100, 'n': 320, 'b': 330, 'r': 500, 'q': 900, 'k': 20000 };
 
-    // Initialize game on page load
-    document.addEventListener('DOMContentLoaded', () => {
+    // Initialize game and Stockfish after scripts load
+    function initializeGame() {
         game = new Chess();
         moveStack = [];
         selectedSquare = null;
         showNotation = false;
         aiDifficulty = 15; // Default to hardest level
         isAIThinking = false;
+        stockfish = new Worker('https://unpkg.com/stockfish@15.1.0/dist/stockfish.js');
+        stockfish.onerror = (e) => showError('Stockfish failed to load: ' + e.message);
         createBoard();
         updateStatus();
         updateTimerDisplay();
-    });
+    }
+
+    // Wait for DOM and scripts to load
+    window.onload = initializeGame;
 
     // Create chessboard with dynamic orientation
     function createBoard() {
@@ -298,7 +202,7 @@
             }
         }
         updateBoard();
-        if (playerSide === 'b' && !isAIThinking) {
+        if (playerSide === 'b' && !isAIThinking && game.turn() === 'b') {
             isAIThinking = true;
             setTimeout(getAIMove, 300); // AI moves first if player is Black
         }
@@ -308,9 +212,14 @@
     function updateBoard() {
         if (!game) return;
         const boardState = game.board();
+        if (!boardState) {
+            showError('Board state not initialized');
+            return;
+        }
         for (let row = 0; row < 8; row++) {
             for (let col = 0; col < 8; col++) {
                 const square = document.querySelector(`[data-pos="${String.fromCharCode(97 + col)}${8 - row}"]`);
+                if (!square) continue; // Skip if square not found
                 const pieceDiv = square.querySelector('.piece');
                 const notationSpan = square.querySelector('.notation');
                 const piece = boardState[row][col];
@@ -377,7 +286,7 @@
         document.getElementById('difficulty-select').value = level;
     }
 
-    // Evaluation function (for lower levels)
+    // Simple evaluation for lower levels
     function evaluateBoard(tempGame) {
         const board = tempGame.board();
         let score = 0;
@@ -406,7 +315,11 @@
         const randomness = Math.max(0, 15 - aiDifficulty) * 0.15;
 
         if (aiDifficulty === 15) {
-            // Use Stockfish for Level 15
+            if (!stockfish) {
+                showError('Stockfish not initialized');
+                isAIThinking = false;
+                return;
+            }
             stockfish.postMessage(`position fen ${game.fen()}`);
             stockfish.postMessage("go movetime 1000"); // 1 second search
 
@@ -414,12 +327,17 @@
                 const message = event.data;
                 if (message.startsWith("bestmove")) {
                     const moveStr = message.split(" ")[1];
-                    bestMove = moves.find(m => m.from + m.to === moveStr) || moves[0]; // Fallback
-                    game.move(bestMove);
-                    moveStack.push({ fen: game.fen(), move: bestMove.san });
-                    updateBoard();
-                    isAIThinking = false;
-                    checkGameOver();
+                    bestMove = moves.find(m => m.from + m.to === moveStr) || moves[0]; // Fallback to first legal move
+                    if (bestMove) {
+                        game.move(bestMove);
+                        moveStack.push({ fen: game.fen(), move: bestMove.san });
+                        updateBoard();
+                        isAIThinking = false;
+                        checkGameOver();
+                    } else {
+                        showError('No valid move found from Stockfish');
+                        isAIThinking = false;
+                    }
                 }
             };
         } else if (aiDifficulty <= 3) {
@@ -455,7 +373,7 @@
             const evaluatedMoves = moves.map(move => {
                 const tempGame = new Chess(game.fen());
                 tempGame.move(move);
-                const score = evaluateBoard(tempGame); // Simplified for speed
+                const score = evaluateBoard(tempGame);
                 return { move, value: score };
             });
             evaluatedMoves.sort((a, b) => game.turn() === 'w' ? b.value - a.value : a.value - b.value);
