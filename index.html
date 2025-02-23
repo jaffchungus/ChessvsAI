@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Chess vs AI</title>
+    <title>Chess vs AI (Stockfish, Local)</title>
     <style>
         body {
             background-color: #1e2a44;
@@ -120,6 +120,7 @@
         <div id="error-message"></div>
     </div>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+    <script src="/stockfish.js"></script> <!-- Updated to local path -->
     <script>
         let game, stockfish, selectedSquare, showNotation, aiDifficulty, isAIThinking, moveStack;
 
@@ -127,7 +128,7 @@
         document.addEventListener('DOMContentLoaded', () => {
             try {
                 game = new Chess();
-                stockfish = new Worker('https://unpkg.com/stockfish-js@0.12.0/stockfish.js');
+                stockfish = new Worker('/stockfish.js'); // Use local path
                 selectedSquare = null;
                 showNotation = false;
                 aiDifficulty = 15; // Default to highest difficulty
@@ -136,6 +137,9 @@
 
                 // Initialize Stockfish
                 stockfish.onmessage = handleStockfishMessage;
+                stockfish.onerror = function(error) {
+                    showError('Stockfish Web Worker error: ' + error.message);
+                };
                 stockfish.postMessage('uci');
                 setDifficulty(15); // Set default difficulty
                 createBoard();
@@ -263,7 +267,7 @@
         // Get AI move from Stockfish
         function getAIMove() {
             if (!stockfish) {
-                showError('Stockfish AI is not loaded. Please check your internet connection or browser compatibility.');
+                showError('Stockfish AI is not loaded. Please check your internet connection or ensure stockfish.js is hosted locally.');
                 isAIThinking = false;
                 return;
             }
@@ -296,7 +300,7 @@
         // Start a new game
         function newGame() {
             if (!game || !stockfish) {
-                showError('Game initialization failed. Please refresh the page.');
+                showError('Game initialization failed. Please refresh the page or check stockfish.js.');
                 return;
             }
             game.reset();
@@ -356,11 +360,6 @@
             errorDiv.style.display = 'block';
             console.error(message);
         }
-
-        // Initialize Stockfish with error handling
-        stockfish.onerror = function(error) {
-            showError('Stockfish Web Worker error: ' + error.message);
-        };
     </script>
 </body>
 </html>
