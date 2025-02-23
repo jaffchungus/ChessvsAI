@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Chess vs AI</title>
+    <title>Chess vs AI (No API)</title>
     <style>
         body {
             background-color: #1e2a44;
@@ -77,6 +77,11 @@
             margin-bottom: 10px;
             font-size: 18px;
         }
+        #difficulty-select {
+            margin-top: 10px;
+            padding: 5px;
+            font-size: 16px;
+        }
     </style>
 </head>
 <body>
@@ -88,18 +93,41 @@
             <button onclick="undoMove()">UNDO MOVE</button>
             <button onclick="toggleNotation()">TOGGLE NOTATION</button>
         </div>
+        <select id="difficulty-select" onchange="setDifficulty(this.value)">
+            <option value="1">Level 1 (Easiest)</option>
+            <option value="2">Level 2</option>
+            <option value="3">Level 3</option>
+            <option value="4">Level 4</option>
+            <option value="5">Level 5</option>
+            <option value="6">Level 6</option>
+            <option value="7">Level 7</option>
+            <option value="8">Level 8</option>
+            <option value="9">Level 9</option>
+            <option value="10">Level 10</option>
+            <option value="11">Level 11</option>
+            <option value="12">Level 12</option>
+            <option value="13">Level 13</option>
+            <option value="14">Level 14</option>
+            <option value="15" selected>Level 15 (Hardest)</option>
+        </select>
     </div>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
     <script>
         const game = new Chess();
-        const stockfish = new Worker('https://unpkg.com/stockfish-js@0.12.0/stockfish.js');
         let selectedSquare = null;
         let showNotation = false;
+        let aiDifficulty = 15; // Default to highest difficulty (deepest search)
+        let moveStack = []; // Track moves for undo
 
         // Map of chess piece types to Unicode symbols
         const pieceSymbols = {
             'P': '♙', 'R': '♖', 'N': '♘', 'B': '♗', 'Q': '♕', 'K': '♔', // White pieces
             'p': '♟', 'r': '♜', 'n': '♞', 'b': '♝', 'q': '♛', 'k': '♚'  // Black pieces
+        };
+
+        // Piece values for evaluation
+        const pieceValues = {
+            'p': 100, 'n': 320, 'b': 330, 'r': 500, 'q': 900, 'k': 20000
         };
 
         // Create the chessboard
@@ -147,22 +175,33 @@
 
         // Handle square clicks for piece movement
         function handleSquareClick(e) {
+            if (game.game_over()) return;
+
             const pos = e.currentTarget.dataset.pos;
+            const piece = game.get(pos);
+
+            if (game.turn() !== 'w') return; // Only allow White (player) to move
+
             if (selectedSquare) {
                 const move = game.move({ from: selectedSquare, to: pos, promotion: 'q' });
                 if (move) {
+                    moveStack.push({ fen: game.fen(), move: move });
                     updateBoard();
                     clearHighlights();
                     selectedSquare = null;
-                    if (game.turn() === 'b') { // AI's turn (black)
-                        setTimeout(getAIMove, 100);
+                    if (!game.game_over()) {
+                        setTimeout(makeAIMove, 100); // AI moves after player's move
                     }
                 } else {
                     clearHighlights();
-                    selectedSquare = null;
+                    if (piece && piece.color === game.turn()) {
+                        selectedSquare = pos;
+                        highlightMoves(pos);
+                    } else {
+                        selectedSquare = null;
+                    }
                 }
             } else {
-                const piece = game.get(pos);
                 if (piece && piece.color === game.turn()) {
                     selectedSquare = pos;
                     highlightMoves(pos);
@@ -189,37 +228,127 @@
             });
         }
 
-        // Get AI move from Stockfish
-        function getAIMove() {
-            stockfish.postMessage('position fen ' + game.fen());
-            stockfish.postMessage('go depth 10');
+        // Set AI difficulty level
+        function setDifficulty(level) {
+            aiDifficulty = parseInt(level);
+            document.getElementById('difficulty-select').value = level;
         }
 
-        // Handle Stockfish responses
-        stockfish.onmessage = function(event) {
-            const message = event.data;
-            if (message.startsWith('bestmove')) {
-                const bestMove = message.split(' ')[1];
+        // AI move using minimax with alpha-beta pruning
+        function makeAIMove() {
+            const depth = aiDifficulty; // Use difficulty level as search depth
+            const bestMove = minimaxRoot(depth, true);
+            if (bestMove) {
                 game.move(bestMove);
+                moveStack.push({ fen: game.fen(), move: bestMove });
                 updateBoard();
                 if (game.in_checkmate()) {
                     alert('Checkmate! ' + (game.turn() === 'w' ? 'Black' : 'White') + ' wins!');
+                } else if (game.in_stalemate() || game.in_draw()) {
+                    alert('Game ended in a draw!');
                 }
             }
-        };
+        }
+
+        // Minimax algorithm with alpha-beta pruning
+        function minimax(depth, alpha, beta, maximizingPlayer) {
+            if (depth === 0 || game.game_over()) {
+                return evaluateBoard();
+            }
+
+            const moves = game.moves();
+            if (maximizingPlayer) {
+                let maxEval = -Infinity;
+                for (const move of moves) {
+                    game.move(move);
+                    const eval = minimax(depth - 1, alpha, beta, false);
+                    game.undo();
+                    maxEval = Math.max(maxEval, eval);
+                    alpha = Math.max(alpha, eval);
+                    if (beta <= alpha) break;
+                }
+                return maxEval;
+            } else {
+                let minEval = Infinity;
+                for (const move of moves) {
+                    game.move(move);
+                    const eval = minimax(depth - 1, alpha, beta, true);
+                    game.undo();
+                    minEval = Math.min(minEval, eval);
+                    beta = Math.min(beta, eval);
+                    if (beta <= alpha) break;
+                }
+                return minEval;
+            }
+        }
+
+        // Find the best move at the root
+        function minimaxRoot(depth, maximizingPlayer) {
+            let bestMove = null;
+            let bestValue = maximizingPlayer ? -Infinity : Infinity;
+            const moves = game.moves({ verbose: true });
+
+            for (const move of moves) {
+                game.move(move);
+                const value = minimax(depth - 1, -Infinity, Infinity, !maximizingPlayer);
+                game.undo();
+
+                if (maximizingPlayer && value > bestValue) {
+                    bestValue = value;
+                    bestMove = move;
+                } else if (!maximizingPlayer && value < bestValue) {
+                    bestValue = value;
+                    bestMove = move;
+                }
+            }
+            return bestMove;
+        }
+
+        // Evaluate the board position
+        function evaluateBoard() {
+            let score = 0;
+            const boardState = game.board();
+
+            for (let row = 0; row < 8; row++) {
+                for (let col = 0; col < 8; col++) {
+                    const piece = boardState[row][col];
+                    if (piece) {
+                        const value = pieceValues[piece.type];
+                        score += piece.color === 'w' ? value : -value;
+                    }
+                }
+            }
+
+            if (game.in_checkmate()) {
+                score = game.turn() === 'w' ? -100000 : 100000;
+            } else if (game.in_stalemate() || game.in_draw()) {
+                score = 0;
+            }
+
+            return score;
+        }
 
         // Start a new game
         function newGame() {
             game.reset();
+            moveStack = []; // Clear move history
             selectedSquare = null;
             createBoard();
-            stockfish.postMessage('ucinewgame');
+            updateStatus();
         }
 
         // Undo the last move
         function undoMove() {
-            game.undo();
-            updateBoard();
+            if (moveStack.length > 0) {
+                moveStack.pop(); // Remove AI or player move
+                if (moveStack.length > 0) {
+                    game.load(moveStack[moveStack.length - 1].fen);
+                } else {
+                    game.reset();
+                }
+                selectedSquare = null;
+                updateBoard();
+            }
         }
 
         // Toggle notation visibility
@@ -249,7 +378,7 @@
 
         // Initialize the game
         createBoard();
-        stockfish.postMessage('uci');
+        updateStatus();
     </script>
 </body>
 </html>
