@@ -283,7 +283,7 @@ function evaluateBoard(tempGame) {
             const piece = board[row][col];
             if (piece) {
                 const value = pieceValues[piece.type];
-                score += piece.color === 'w' ? value : -value; // White positive, Black negative
+                score += piece.color === 'w' ? value : -value;
             }
         }
     }
@@ -291,20 +291,6 @@ function evaluateBoard(tempGame) {
     // Mobility
     const moves = tempGame.moves({ verbose: true });
     score += tempGame.turn() === 'w' ? moves.length * 5 : -moves.length * 5;
-
-    // King safety
-    const whiteKing = board.flat().find(p => p && p.type === 'k' && p.color === 'w');
-    const blackKing = board.flat().find(p => p && p.type === 'k' && p.color === 'b');
-    if (whiteKing) {
-        const row = Math.floor(board.flat().indexOf(whiteKing) / 8);
-        const col = board.flat().indexOf(whiteKing) % 8;
-        score -= 5 * (Math.abs(3.5 - row) + Math.abs(3.5 - col)); // Penalize king distance from center
-    }
-    if (blackKing) {
-        const row = Math.floor(board.flat().indexOf(blackKing) / 8);
-        const col = board.flat().indexOf(blackKing) % 8;
-        score += 5 * (Math.abs(3.5 - row) + Math.abs(3.5 - col));
-    }
 
     // Center control
     const centerSquares = ['d4', 'd5', 'e4', 'e5'];
@@ -316,20 +302,6 @@ function evaluateBoard(tempGame) {
         }
     });
 
-    // Pawn structure (doubled pawns penalty)
-    for (let col = 0; col < 8; col++) {
-        let whitePawns = 0, blackPawns = 0;
-        for (let row = 0; row < 8; row++) {
-            const piece = board[row][col];
-            if (piece && piece.type === 'p') {
-                if (piece.color === 'w') whitePawns++;
-                else blackPawns++;
-            }
-        }
-        if (whitePawns > 1) score -= 20 * (whitePawns - 1);
-        if (blackPawns > 1) score += 20 * (blackPawns - 1);
-    }
-
     // Check bonus
     if (tempGame.in_check()) {
         score += tempGame.turn() === 'w' ? -50 : 50;
@@ -338,13 +310,22 @@ function evaluateBoard(tempGame) {
     return score;
 }
 
+// Move ordering for alpha-beta efficiency
+function orderMoves(moves) {
+    return moves.sort((a, b) => {
+        const aScore = (a.captured ? pieceValues[a.captured] : 0) + (a.flags.includes('k') || a.flags.includes('q') ? 1000 : 0);
+        const bScore = (b.captured ? pieceValues[b.captured] : 0) + (b.flags.includes('k') || b.flags.includes('q') ? 1000 : 0);
+        return bScore - aScore; // Sort descending
+    });
+}
+
 // Minimax with alpha-beta pruning
 function minimax(tempGame, depth, alpha, beta, maximizingPlayer) {
     if (depth === 0 || tempGame.game_over()) {
         return evaluateBoard(tempGame);
     }
 
-    const moves = tempGame.moves({ verbose: true });
+    const moves = orderMoves(tempGame.moves({ verbose: true }));
     if (maximizingPlayer) {
         let maxEval = -Infinity;
         for (const move of moves) {
@@ -353,7 +334,7 @@ function minimax(tempGame, depth, alpha, beta, maximizingPlayer) {
             const evalScore = minimax(newGame, depth - 1, alpha, beta, false);
             maxEval = Math.max(maxEval, evalScore);
             alpha = Math.max(alpha, evalScore);
-            if (beta <= alpha) break; // Beta cutoff
+            if (beta <= alpha) break;
         }
         return maxEval;
     } else {
@@ -364,7 +345,7 @@ function minimax(tempGame, depth, alpha, beta, maximizingPlayer) {
             const evalScore = minimax(newGame, depth - 1, alpha, beta, true);
             minEval = Math.min(minEval, evalScore);
             beta = Math.min(beta, evalScore);
-            if (beta <= alpha) break; // Alpha cutoff
+            if (beta <= alpha) break;
         }
         return minEval;
     }
@@ -413,13 +394,21 @@ function getAIMove() {
             evaluatedMoves[0].move :
             moves[Math.floor(Math.random() * moves.length)];
     } else { // Level 15
-        const depth = 4; // Grandmaster level depth
-        const evaluatedMoves = moves.map(move => {
+        const depth = 3; // Reduced from 4 for speed
+        const startTime = Date.now();
+        const timeLimit = 2000; // 2 seconds max
+
+        // Pre-filter promising moves (captures, checks, promotions)
+        const promisingMoves = orderMoves(moves).slice(0, Math.min(10, moves.length));
+
+        const evaluatedMoves = promisingMoves.map(move => {
             const tempGame = new Chess(game.fen());
             tempGame.move(move);
             const score = minimax(tempGame, depth - 1, -Infinity, Infinity, game.turn() === 'b');
+            if (Date.now() - startTime > timeLimit) throw new Error('Time limit exceeded');
             return { move, value: score };
         });
+
         evaluatedMoves.sort((a, b) => game.turn() === 'w' ? b.value - a.value : a.value - b.value);
         bestMove = evaluatedMoves[0].move; // Always pick the best move
     }
