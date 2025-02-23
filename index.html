@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Chess vs AI (Stockfish, Local)</title>
+    <title>Chess vs AI (Stockfish)</title>
     <style>
         body {
             background-color: #1e2a44;
@@ -33,20 +33,12 @@
             justify-content: center;
             font-size: 40px;
             position: relative;
-            font-family: "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif; /* Ensure Unicode support */
+            font-family: "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif;
         }
-        .light {
-            background-color: #ebecd0;
-        }
-        .dark {
-            background-color: #779556;
-        }
-        .selected {
-            background-color: #ffeb3b !important;
-        }
-        .valid-move {
-            background-color: #baca44 !important;
-        }
+        .light { background-color: #ebecd0; }
+        .dark { background-color: #779556; }
+        .selected { background-color: #ffeb3b !important; }
+        .valid-move { background-color: #baca44 !important; }
         .notation {
             position: absolute;
             bottom: 2px;
@@ -70,9 +62,7 @@
             cursor: pointer;
             font-size: 16px;
         }
-        button:hover {
-            background-color: #4a5aa8;
-        }
+        button:hover { background-color: #4a5aa8; }
         #status {
             color: white;
             text-align: center;
@@ -89,14 +79,6 @@
             margin-top: 10px;
             display: none;
         }
-        #debug-info {
-            color: yellow;
-            margin-top: 10px;
-            max-height: 200px;
-            overflow-y: auto;
-            display: none;
-            white-space: pre-wrap;
-        }
     </style>
 </head>
 <body>
@@ -110,119 +92,60 @@
         </div>
         <select id="difficulty-select" onchange="setDifficulty(this.value)">
             <option value="1">Level 1 (Easiest)</option>
-            <option value="2">Level 2</option>
-            <option value="3">Level 3</option>
-            <option value="4">Level 4</option>
             <option value="5">Level 5</option>
-            <option value="6">Level 6</option>
-            <option value="7">Level 7</option>
-            <option value="8">Level 8</option>
-            <option value="9">Level 9</option>
             <option value="10">Level 10</option>
-            <option value="11">Level 11</option>
-            <option value="12">Level 12</option>
-            <option value="13">Level 13</option>
-            <option value="14">Level 14</option>
             <option value="15" selected>Level 15 (Hardest)</option>
         </select>
         <div id="error-message"></div>
-        <div id="debug-info"></div>
     </div>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
-    <script src="/stockfish.js"></script> <!-- Local path; ensure this file exists in your public directory -->
     <script>
         let game, stockfish, selectedSquare, showNotation, aiDifficulty, isAIThinking, moveStack;
 
-        // Initialize game and AI on page load with detailed error handling
-        document.addEventListener('DOMContentLoaded', () => {
+        // Initialize game and AI on page load
+        document.addEventListener('DOMContentLoaded', async () => {
             try {
                 game = new Chess();
-                // Attempt to create Web Worker with detailed debugging and fallback
-                try {
-                    stockfish = new Worker('/stockfish.js');
-                    logDebug('Attempting to load Stockfish Web Worker at /stockfish.js...');
-                    
-                    // Test if Worker is loaded by sending a simple message
-                    stockfish.postMessage('isready');
-                } catch (workerError) {
-                    showError(`Failed to load Stockfish Web Worker: ${workerError.message}. Ensure stockfish.js is in the public directory and accessible at /stockfish.js.`);
-                    logDebug(`Worker error details: ${JSON.stringify(workerError)}`);
-                    // Fallback: Try loading Stockfish as a script (if Worker fails due to environment restrictions)
-                    loadStockfishAsScript();
-                    return;
-                }
-
                 selectedSquare = null;
                 showNotation = false;
-                aiDifficulty = 15; // Default to highest difficulty
+                aiDifficulty = 15; // Default difficulty
                 isAIThinking = false;
-                moveStack = []; // Track moves for undo
+                moveStack = [];
 
-                // Initialize Stockfish with comprehensive error handling
+                // Verify stockfish.js availability before initializing
+                const stockfishPath = '/stockfish.js';
+                const response = await fetch(stockfishPath, { method: 'HEAD' });
+                if (!response.ok) {
+                    throw new Error(`stockfish.js not found at ${stockfishPath}. Ensure it's in the public directory.`);
+                }
+
+                // Initialize Stockfish Web Worker
+                stockfish = new Worker(stockfishPath);
                 stockfish.onmessage = handleStockfishMessage;
-                stockfish.onerror = function(error) {
-                    showError(`Stockfish Web Worker error: ${error.message || 'Unknown error'}. Check if stockfish.js is correctly hosted and loaded.`);
-                    logDebug(`Stockfish error details: ${JSON.stringify(error)}`);
-                    // Attempt to reload Stockfish as a script if Worker fails
-                    loadStockfishAsScript();
+                stockfish.onerror = (error) => {
+                    showError(`Stockfish Web Worker error: ${error.message || 'Unknown error'}`);
                 };
-                stockfish.onmessageerror = function(error) {
-                    showError(`Stockfish message error: ${error.message || 'Unknown message error'}`);
-                    logDebug(`Message error details: ${JSON.stringify(error)}`);
-                };
-
                 stockfish.postMessage('uci');
-                logDebug('Stockfish initialized with UCI command. Waiting for "readyok"...');
-                setDifficulty(15); // Set default difficulty
+
+                // Set default difficulty and create board
+                setDifficulty(aiDifficulty);
                 createBoard();
                 updateStatus();
             } catch (error) {
-                showError(`Initialization failed: ${error.message}`);
-                logDebug(`Global initialization error: ${JSON.stringify(error)}`);
+                showError(`Initialization failed: ${error.message}. Check console for details.`);
+                console.error(error);
             }
         });
 
-        // Fallback: Load Stockfish as a regular script if Web Worker fails
-        function loadStockfishAsScript() {
-            logDebug('Attempting to load Stockfish as a regular script due to Web Worker failure...');
-            const script = document.createElement('script');
-            script.src = '/stockfish.js';
-            script.onload = () => {
-                logDebug('Stockfish loaded as script. Initializing manually...');
-                stockfish = {
-                    postMessage: (message) => {
-                        if (window.Stockfish) {
-                            window.Stockfish(message, (response) => handleStockfishMessage({ data: response }));
-                        } else {
-                            showError('Stockfish script loaded but not initialized properly.');
-                            logDebug('Stockfish script initialization failed.');
-                        }
-                    },
-                    terminate: () => {}
-                };
-                stockfish.postMessage('uci');
-            };
-            script.onerror = (error) => {
-                showError(`Failed to load Stockfish as script: ${error.message}. Ensure stockfish.js is accessible.`);
-                logDebug(`Script load error: ${JSON.stringify(error)}`);
-            };
-            document.body.appendChild(script);
-        }
-
-        // Map of chess piece types to Unicode symbols
+        // Chess piece symbols
         const pieceSymbols = {
-            'P': '♙', 'R': '♖', 'N': '♘', 'B': '♗', 'Q': '♕', 'K': '♔', // White pieces
-            'p': '♟', 'r': '♜', 'n': '♞', 'b': '♝', 'q': '♛', 'k': '♚'  // Black pieces
+            'P': '♙', 'R': '♖', 'N': '♘', 'B': '♗', 'Q': '♕', 'K': '♔',
+            'p': '♟', 'r': '♜', 'n': '♞', 'b': '♝', 'q': '♛', 'k': '♚'
         };
 
-        // Create the chessboard
+        // Create chessboard
         function createBoard() {
             const board = document.getElementById('chessboard');
-            if (!board) {
-                showError('Chessboard element not found. Check HTML structure.');
-                logDebug('Chessboard element missing in DOM.');
-                return;
-            }
             board.innerHTML = '';
             for (let row = 0; row < 8; row++) {
                 for (let col = 0; col < 8; col++) {
@@ -230,16 +153,7 @@
                     const isLight = (row + col) % 2 === 0;
                     square.className = `square ${isLight ? 'light' : 'dark'}`;
                     square.dataset.pos = `${String.fromCharCode(97 + col)}${8 - row}`;
-
-                    const pieceDiv = document.createElement('div');
-                    pieceDiv.className = 'piece';
-                    square.appendChild(pieceDiv);
-
-                    const notationSpan = document.createElement('span');
-                    notationSpan.className = 'notation';
-                    notationSpan.textContent = square.dataset.pos;
-                    square.appendChild(notationSpan);
-
+                    square.innerHTML = `<div class="piece"></div><span class="notation">${square.dataset.pos}</span>`;
                     square.addEventListener('click', handleSquareClick);
                     board.appendChild(square);
                 }
@@ -247,13 +161,9 @@
             updateBoard();
         }
 
-        // Update the board with current pieces and notation
+        // Update board state
         function updateBoard() {
-            if (!game) {
-                showError('Game object not initialized. Please refresh the page.');
-                logDebug('Game object is null or undefined.');
-                return;
-            }
+            if (!game) return;
             const boardState = game.board();
             for (let row = 0; row < 8; row++) {
                 for (let col = 0; col < 8; col++) {
@@ -268,14 +178,12 @@
             updateStatus();
         }
 
-        // Handle square clicks for piece movement
+        // Handle square clicks
         function handleSquareClick(e) {
             if (!game || game.game_over() || isAIThinking) return;
-
             const pos = e.currentTarget.dataset.pos;
             const piece = game.get(pos);
-
-            if (game.turn() !== 'w') return; // Only allow White (player) to move
+            if (game.turn() !== 'w') return; // Player is White
 
             if (selectedSquare) {
                 const move = game.move({ from: selectedSquare, to: pos, promotion: 'q' });
@@ -287,188 +195,132 @@
                     if (!game.game_over()) {
                         isAIThinking = true;
                         updateStatus();
-                        setTimeout(getAIMove, 100); // AI moves after player's move
+                        setTimeout(getAIMove, 100);
                     }
                 } else {
                     clearHighlights();
-                    if (piece && piece.color === game.turn()) {
+                    if (piece && piece.color === 'w') {
                         selectedSquare = pos;
                         highlightMoves(pos);
                     } else {
                         selectedSquare = null;
                     }
                 }
-            } else {
-                if (piece && piece.color === game.turn()) {
-                    selectedSquare = pos;
-                    highlightMoves(pos);
-                }
+            } else if (piece && piece.color === 'w') {
+                selectedSquare = pos;
+                highlightMoves(pos);
             }
         }
 
-        // Highlight valid moves for the selected piece
+        // Highlight valid moves
         function highlightMoves(pos) {
             clearHighlights();
             const moves = game.moves({ square: pos, verbose: true });
             moves.forEach(move => {
-                const square = document.querySelector(`[data-pos="${move.to}"]`);
-                square.classList.add('valid-move');
+                document.querySelector(`[data-pos="${move.to}"]`).classList.add('valid-move');
             });
-            const selected = document.querySelector(`[data-pos="${pos}"]`);
-            selected.classList.add('selected');
+            document.querySelector(`[data-pos="${pos}"]`).classList.add('selected');
         }
 
-        // Clear all highlights
+        // Clear highlights
         function clearHighlights() {
             document.querySelectorAll('.square').forEach(square => {
                 square.classList.remove('selected', 'valid-move');
             });
         }
 
-        // Set AI difficulty level
+        // Set AI difficulty
         function setDifficulty(level) {
-            if (!stockfish) {
-                showError('Stockfish not initialized. Check Web Worker or script setup.');
-                logDebug('Stockfish is null or undefined.');
-                return;
-            }
             aiDifficulty = parseInt(level);
-            if (stockfish.postMessage) {
+            if (stockfish) {
                 stockfish.postMessage(`setoption name Skill Level value ${aiDifficulty}`);
-            } else if (window.Stockfish) {
-                window.Stockfish(`setoption name Skill Level value ${aiDifficulty}`, () => {});
             }
             document.getElementById('difficulty-select').value = level;
-            logDebug(`AI difficulty set to level ${aiDifficulty}`);
         }
 
-        // Get AI move from Stockfish
+        // Request AI move
         function getAIMove() {
-            if (!stockfish && !window.Stockfish) {
-                showError('Stockfish AI is not loaded. Please check your setup.');
+            if (!stockfish) {
+                showError('Stockfish AI not loaded.');
                 isAIThinking = false;
-                logDebug('Stockfish Worker and script not available for AI move.');
                 return;
             }
-            const fen = game.fen();
-            if (stockfish.postMessage) {
-                stockfish.postMessage('position fen ' + fen);
-                stockfish.postMessage('go depth 15'); // Use fixed depth, adjusted by Skill Level
-                logDebug('Requested AI move with FEN (Worker): ' + fen);
-            } else if (window.Stockfish) {
-                window.Stockfish('position fen ' + fen, () => {});
-                window.Stockfish('go depth 15', (response) => handleStockfishMessage({ data: response }));
-                logDebug('Requested AI move with FEN (Script): ' + fen);
-            }
+            stockfish.postMessage(`position fen ${game.fen()}`);
+            stockfish.postMessage('go depth 15');
         }
 
-        // Handle Stockfish responses
+        // Handle Stockfish messages
         function handleStockfishMessage(event) {
-            const message = event.data || event;
-            logDebug(`Stockfish response: ${message}`);
-            if (message.startsWith('bestmove')) {
+            const message = event.data;
+            if (message === 'readyok') {
+                console.log('Stockfish ready.');
+            } else if (message.startsWith('bestmove')) {
                 const bestMove = message.split(' ')[1];
                 if (bestMove && bestMove !== '(none)') {
                     game.move(bestMove);
                     moveStack.push({ fen: game.fen(), move: bestMove });
                     updateBoard();
                     isAIThinking = false;
-                    if (game.in_checkmate()) {
-                        alert('Checkmate! ' + (game.turn() === 'w' ? 'Black' : 'White') + ' wins!');
-                    } else if (game.in_stalemate() || game.in_draw()) {
-                        alert('Game ended in a draw!');
-                    }
+                    checkGameOver();
                 }
-            } else if (message.startsWith('error')) {
-                showError('Stockfish error: ' + message);
-                isAIThinking = false;
-            } else if (message === 'readyok') {
-                logDebug('Stockfish is ready and initialized successfully.');
-            } else if (message === 'uciok') {
-                logDebug('Stockfish UCI protocol initialized successfully.');
             }
         }
 
-        // Start a new game
-        function newGame() {
-            if (!game || (!stockfish && !window.Stockfish)) {
-                showError('Game initialization failed. Please refresh the page or check stockfish.js.');
-                logDebug('Game or Stockfish not initialized for new game.');
-                return;
+        // Check game over conditions
+        function checkGameOver() {
+            if (game.in_checkmate()) {
+                alert(`Checkmate! ${game.turn() === 'w' ? 'Black' : 'White'} wins!`);
+            } else if (game.in_stalemate() || game.in_draw()) {
+                alert('Game ended in a draw!');
             }
+        }
+
+        // Start new game
+        function newGame() {
             game.reset();
-            moveStack = []; // Clear move history
+            moveStack = [];
             selectedSquare = null;
             isAIThinking = false;
             createBoard();
-            if (stockfish.postMessage) {
-                stockfish.postMessage('ucinewgame');
-            } else if (window.Stockfish) {
-                window.Stockfish('ucinewgame', () => {});
-            }
+            if (stockfish) stockfish.postMessage('ucinewgame');
             updateStatus();
-            logDebug('New game started with Stockfish reset.');
         }
 
-        // Undo the last move
+        // Undo move
         function undoMove() {
-            if (!game || moveStack.length === 0 || isAIThinking) return;
-            moveStack.pop(); // Remove AI or player move
-            if (moveStack.length > 0) {
-                game.load(moveStack[moveStack.length - 1].fen);
-            } else {
-                game.reset();
+            if (moveStack.length >= 2 && !isAIThinking) {
+                moveStack.pop(); // Remove AI move
+                moveStack.pop(); // Remove player move
+                game.load(moveStack.length ? moveStack[moveStack.length - 1].fen : game.startingFen());
+                selectedSquare = null;
+                updateBoard();
             }
-            selectedSquare = null;
-            updateBoard();
-            logDebug('Last move undone. Current FEN: ' + game.fen());
         }
 
-        // Toggle notation visibility
+        // Toggle notation
         function toggleNotation() {
             showNotation = !showNotation;
-            document.querySelectorAll('.notation').forEach(span => {
-                span.style.display = showNotation ? 'block' : 'none';
-            });
-            logDebug(`Notation visibility toggled to: ${showNotation}`);
+            updateBoard();
         }
 
-        // Update game status
+        // Update status
         function updateStatus() {
             const statusDiv = document.getElementById('status');
-            if (game.in_checkmate()) {
-                statusDiv.textContent = `Checkmate! ${game.turn() === 'w' ? 'Black' : 'White'} wins!`;
-            } else if (game.in_stalemate()) {
-                statusDiv.textContent = 'Stalemate! Draw.';
-            } else if (game.in_draw()) {
-                statusDiv.textContent = 'Draw.';
+            if (game.game_over()) {
+                statusDiv.textContent = game.in_checkmate() ? 
+                    `Checkmate! ${game.turn() === 'w' ? 'Black' : 'White'} wins!` : 
+                    'Draw!';
             } else {
-                statusDiv.textContent = `${game.turn() === 'w' ? 'White' : 'Black'} to move`;
-                if (isAIThinking) {
-                    statusDiv.textContent = "AI is thinking...";
-                }
-                if (game.in_check()) {
-                    statusDiv.textContent += ' (in check)';
-                }
+                statusDiv.textContent = `${game.turn() === 'w' ? 'White' : 'Black'} to move${game.in_check() ? ' (in check)' : ''}`;
+                if (isAIThinking) statusDiv.textContent = 'AI is thinking...';
             }
-            logDebug(`Status updated: ${statusDiv.textContent}`);
         }
 
-        // Show error message
+        // Show error
         function showError(message) {
             const errorDiv = document.getElementById('error-message');
             errorDiv.textContent = message;
             errorDiv.style.display = 'block';
-            console.error(message);
-        }
-
-        // Log debug information with scrollable output
-        function logDebug(message) {
-            const debugDiv = document.getElementById('debug-info');
-            debugDiv.textContent += `${new Date().toISOString()} - ${message}\n`;
-            debugDiv.scrollTop = debugDiv.scrollHeight; // Auto-scroll to the bottom
-            debugDiv.style.display = 'block';
-            console.log(`Debug: ${message}`);
         }
     </script>
 </body>
