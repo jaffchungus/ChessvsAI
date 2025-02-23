@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Chess vs Simple AI</title>
+    <title>Chess vs Enhanced AI</title>
     <style>
         body {
             background-color: #1e2a44;
@@ -98,7 +98,14 @@
         <select id="difficulty-select" onchange="setDifficulty(this.value)">
             <option value="1">Level 1 (Easiest)</option>
             <option value="2">Level 2</option>
-            <option value="3" selected>Level 3 (Hardest)</option>
+            <option value="3">Level 3</option>
+            <option value="4">Level 4</option>
+            <option value="5">Level 5</option>
+            <option value="6">Level 6</option>
+            <option value="7">Level 7</option>
+            <option value="8">Level 8</option>
+            <option value="9">Level 9</option>
+            <option value="10" selected>Level 10 (Hardest)</option>
         </select>
         <div id="error-message"></div>
     </div>
@@ -112,10 +119,8 @@
             'p': '♟', 'r': '♜', 'n': '♞', 'b': '♝', 'q': '♛', 'k': '♚'
         };
 
-        // Piece values for simple evaluation
-        const pieceValues = {
-            'p': 1, 'n': 3, 'b': 3, 'r': 5, 'q': 9, 'k': 0
-        };
+        // Piece values for evaluation
+        const pieceValues = { 'p': 100, 'n': 320, 'b': 330, 'r': 500, 'q': 900, 'k': 20000 };
 
         // Initialize game on page load
         document.addEventListener('DOMContentLoaded', () => {
@@ -123,7 +128,7 @@
             moveStack = [];
             selectedSquare = null;
             showNotation = false;
-            aiDifficulty = 3; // Default to hardest level
+            aiDifficulty = 10; // Default to hardest level
             isAIThinking = false;
             createBoard();
             updateStatus();
@@ -221,7 +226,63 @@
             document.getElementById('difficulty-select').value = level;
         }
 
-        // Simple AI move selection
+        // Evaluate board position (positive = good for Black, negative = good for White)
+        function evaluateBoard(tempGame) {
+            const board = tempGame.board();
+            let score = 0;
+
+            // Material count
+            for (let row = 0; row < 8; row++) {
+                for (let col = 0; col < 8; col++) {
+                    const piece = board[row][col];
+                    if (piece) {
+                        const value = pieceValues[piece.type];
+                        score += piece.color === 'b' ? value : -value;
+                    }
+                }
+            }
+
+            // Piece mobility (number of legal moves)
+            const moves = tempGame.moves({ verbose: true });
+            score += tempGame.turn() === 'b' ? moves.length * 5 : -moves.length * 5;
+
+            // King safety (simplified: penalize if in check)
+            if (tempGame.in_check()) {
+                score += tempGame.turn() === 'b' ? -50 : 50;
+            }
+
+            return score;
+        }
+
+        // Minimax with limited depth
+        function minimax(tempGame, depth, isMaximizing) {
+            if (depth === 0 || tempGame.game_over()) {
+                return evaluateBoard(tempGame);
+            }
+
+            const moves = tempGame.moves({ verbose: true });
+            if (isMaximizing) {
+                let maxEval = -Infinity;
+                for (const move of moves) {
+                    tempGame.move(move);
+                    const evalScore = minimax(tempGame, depth - 1, false);
+                    tempGame.undo();
+                    maxEval = Math.max(maxEval, evalScore);
+                }
+                return maxEval;
+            } else {
+                let minEval = Infinity;
+                for (const move of moves) {
+                    tempGame.move(move);
+                    const evalScore = minimax(tempGame, depth - 1, true);
+                    tempGame.undo();
+                    minEval = Math.min(minEval, evalScore);
+                }
+                return minEval;
+            }
+        }
+
+        // AI move selection
         function getAIMove() {
             const moves = game.moves({ verbose: true });
             if (moves.length === 0) {
@@ -231,27 +292,41 @@
             }
 
             let bestMove;
-            if (aiDifficulty === 1) {
-                // Level 1: Random move
-                bestMove = moves[Math.floor(Math.random() * moves.length)];
-            } else {
-                // Level 2 & 3: Evaluate moves based on captures
+            const randomness = Math.max(0, 10 - aiDifficulty) * 0.1; // More random at lower levels
+
+            if (aiDifficulty <= 3) {
+                // Levels 1-3: Mostly random with slight preference for captures
+                const evaluatedMoves = moves.map(move => ({
+                    move,
+                    value: move.captured ? pieceValues[move.captured] : 0
+                }));
+                evaluatedMoves.sort((a, b) => b.value - a.value);
+                const topMoves = evaluatedMoves.slice(0, Math.min(5, evaluatedMoves.length));
+                bestMove = topMoves[Math.floor(Math.random() * topMoves.length)].move;
+            } else if (aiDifficulty <= 7) {
+                // Levels 4-7: Evaluate immediate moves with basic scoring
                 const evaluatedMoves = moves.map(move => {
                     const tempGame = new Chess(game.fen());
                     tempGame.move(move);
-                    const capturedPiece = move.captured ? pieceValues[move.captured] : 0;
-                    return { move, value: capturedPiece };
+                    return { move, value: evaluateBoard(tempGame) };
                 });
                 evaluatedMoves.sort((a, b) => b.value - a.value);
-                
-                if (aiDifficulty === 2) {
-                    // Level 2: Pick a random move from top 3 captures
-                    const topMoves = evaluatedMoves.slice(0, Math.min(3, evaluatedMoves.length));
-                    bestMove = topMoves[Math.floor(Math.random() * topMoves.length)].move;
-                } else {
-                    // Level 3: Pick best capture or random if no captures
-                    bestMove = evaluatedMoves[0].value > 0 ? evaluatedMoves[0].move : moves[Math.floor(Math.random() * moves.length)];
-                }
+                bestMove = evaluatedMoves[0].value > 0 || Math.random() > randomness ?
+                    evaluatedMoves[0].move :
+                    moves[Math.floor(Math.random() * moves.length)];
+            } else {
+                // Levels 8-10: Use minimax with increasing depth
+                const depth = aiDifficulty === 8 ? 1 : aiDifficulty === 9 ? 2 : 3;
+                const evaluatedMoves = moves.map(move => {
+                    const tempGame = new Chess(game.fen());
+                    tempGame.move(move);
+                    const score = minimax(tempGame, depth - 1, false);
+                    return { move, value: score };
+                });
+                evaluatedMoves.sort((a, b) => b.value - a.value);
+                bestMove = Math.random() > randomness ?
+                    evaluatedMoves[0].move :
+                    moves[Math.floor(Math.random() * moves.length)];
             }
 
             game.move(bestMove);
@@ -314,7 +389,7 @@
             }
         }
 
-        // Show error (not used much here, but kept for consistency)
+        // Show error (kept for consistency)
         function showError(message) {
             const errorDiv = document.getElementById('error-message');
             errorDiv.textContent = message;
