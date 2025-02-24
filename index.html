@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Chess vs AI (2700 Elo)</title>
+    <title>Chess vs AI (Levels 1-15, Rated)</title>
     <style>
         body {
             background-color: #1e2a44;
@@ -70,6 +70,11 @@
             margin-bottom: 10px;
             font-size: 18px;
         }
+        #difficulty-select, #side-select {
+            margin-top: 10px;
+            padding: 5px;
+            font-size: 16px;
+        }
         #error-message {
             color: #ff4444;
             margin-top: 10px;
@@ -84,28 +89,34 @@
             margin-top: 10px;
             font-size: 18px;
         }
-        #game-result {
-            color: white;
-            margin-top: 10px;
-            font-size: 18px;
-        }
-        #side-select {
-            margin-top: 10px;
-            padding: 5px;
-            font-size: 16px;
-        }
     </style>
 </head>
 <body>
     <div class="game-container">
         <div id="status">White to move</div>
         <div id="chessboard"></div>
-        <div id="game-result"></div>
         <div class="controls">
             <button onclick="newGame()">NEW GAME</button>
             <button onclick="undoMove()">UNDO MOVE</button>
             <button onclick="toggleNotation()">TOGGLE NOTATION</button>
         </div>
+        <select id="difficulty-select" onchange="setDifficulty(this.value)">
+            <option value="1">Level 1 (Easiest)</option>
+            <option value="2">Level 2</option>
+            <option value="3">Level 3</option>
+            <option value="4">Level 4</option>
+            <option value="5">Level 5</option>
+            <option value="6">Level 6</option>
+            <option value="7">Level 7</option>
+            <option value="8">Level 8</option>
+            <option value="9">Level 9</option>
+            <option value="10">Level 10</option>
+            <option value="11">Level 11</option>
+            <option value="12">Level 12</option>
+            <option value="13">Level 13</option>
+            <option value="14">Level 14</option>
+            <option value="15" selected>Level 15 (~2700 Elo)</option>
+        </select>
         <select id="side-select" onchange="setPlayerSide(this.value)">
             <option value="w" selected>Play as White</option>
             <option value="b">Play as Black</option>
@@ -117,7 +128,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
     <script src="./stockfish.js"></script> <!-- Local Stockfish.js -->
     <script>
-    let game, selectedSquare, showNotation, isAIThinking, moveStack;
+    let game, selectedSquare, showNotation, aiDifficulty, isAIThinking, moveStack;
     let playerSide = 'w';
     let playerRating = 1500; // Starting rating
     let stockfish = null;
@@ -128,26 +139,52 @@
         'p': '♟', 'r': '♜', 'n': '♞', 'b': '♝', 'q': '♛', 'k': '♚'
     };
 
+    // Piece values for custom AI
+    const pieceValues = { 'p': 100, 'n': 320, 'b': 330, 'r': 500, 'q': 900, 'k': 20000 };
+
     // Initialize game and Stockfish
     window.onload = function() {
         game = new Chess();
         moveStack = [];
         selectedSquare = null;
         showNotation = false;
+        aiDifficulty = 15;
         isAIThinking = false;
         try {
             stockfish = new Worker('./stockfish.js');
             stockfish.postMessage('uci');
             stockfish.postMessage('setoption name UCI_LimitStrength value true');
             stockfish.postMessage('setoption name UCI_Elo value 2700');
+            stockfish.onmessage = handleStockfishMessage;
         } catch (e) {
             showError('Stockfish initialization error: ' + e.message);
+            stockfish = null; // Fallback to custom AI if Stockfish fails
         }
         createBoard();
         updateStatus();
     };
 
-    // Create chessboard with dynamic orientation
+    // Handle Stockfish messages
+    function handleStockfishMessage(event) {
+        const message = event.data;
+        if (message.startsWith("bestmove") && isAIThinking) {
+            const moveStr = message.split(" ")[1];
+            const moves = game.moves({ verbose: true });
+            const move = moves.find(m => m.from + m.to === moveStr);
+            if (move) {
+                game.move(move);
+                moveStack.push({ fen: game.fen(), move: move.san });
+                updateBoard();
+                isAIThinking = false;
+                checkGameOver();
+            } else {
+                showError('Invalid move from Stockfish');
+                isAIThinking = false;
+            }
+        }
+    }
+
+    // Create chessboard
     function createBoard() {
         const board = document.getElementById('chessboard');
         board.innerHTML = '';
@@ -249,45 +286,126 @@
         });
     }
 
-    // AI move selection with Stockfish
-    function getAIMove() {
-        stockfish.postMessage(`position fen ${game.fen()}`);
-        stockfish.postMessage("go movetime 500"); // 500ms for ~2700 Elo
-        stockfish.onmessage = function(event) {
-            const message = event.data;
-            if (message.startsWith("bestmove")) {
-                const moveStr = message.split(" ")[1];
-                const move = game.move({ from: moveStr.substr(0,2), to: moveStr.substr(2,2), promotion: 'q' });
-                if (move) {
-                    moveStack.push({ fen: game.fen(), move: move.san });
-                    updateBoard();
-                    isAIThinking = false;
-                    checkGameOver();
-                } else {
-                    showError('Invalid move from Stockfish');
-                    isAIThinking = false;
-                }
-            }
-        };
+    // Set AI difficulty
+    function setDifficulty(level) {
+        aiDifficulty = parseInt(level);
+        document.getElementById('difficulty-select').value = level;
     }
 
-    // Check game over conditions and update rating
-    function checkGameOver() {
-        if (game.in_checkmate()) {
-            if (game.turn() === playerSide) {
-                document.getElementById('game-result').textContent = "Checkmate! You lost.";
-                updateRating(0); // Player loses
-            } else {
-                document.getElementById('game-result').textContent = "Checkmate! You won.";
-                updateRating(1); // Player wins
+    // Custom AI evaluation (for Levels 1-14)
+    function evaluateBoard(tempGame) {
+        const board = tempGame.board();
+        let score = 0;
+        for (let row = 0; row < 8; row++) {
+            for (let col = 0; col < 8; col++) {
+                const piece = board[row][col];
+                if (piece) {
+                    const value = pieceValues[piece.type];
+                    score += piece.color === 'w' ? value : -value;
+                }
             }
-        } else if (game.in_stalemate() || game.in_threefold_repetition() || game.insufficient_material()) {
-            document.getElementById('game-result').textContent = "Draw!";
-            updateRating(0.5); // Draw
+        }
+        return score;
+    }
+
+    // Custom minimax with alpha-beta pruning (for Levels 1-14)
+    function minimax(tempGame, depth, alpha, beta, maximizingPlayer, startTime, timeLimit) {
+        if (depth === 0 || tempGame.game_over() || (Date.now() - startTime > timeLimit)) {
+            return evaluateBoard(tempGame);
+        }
+
+        const moves = tempGame.moves({ verbose: true });
+        if (maximizingPlayer) {
+            let maxEval = -Infinity;
+            for (const move of moves) {
+                const newGame = new Chess(tempGame.fen());
+                newGame.move(move);
+                const evalScore = minimax(newGame, depth - 1, alpha, beta, false, startTime, timeLimit);
+                maxEval = Math.max(maxEval, evalScore);
+                alpha = Math.max(alpha, evalScore);
+                if (beta <= alpha) break;
+            }
+            return maxEval;
+        } else {
+            let minEval = Infinity;
+            for (const move of moves) {
+                const newGame = new Chess(tempGame.fen());
+                newGame.move(move);
+                const evalScore = minimax(newGame, depth - 1, alpha, beta, true, startTime, timeLimit);
+                minEval = Math.min(minEval, evalScore);
+                beta = Math.min(beta, evalScore);
+                if (beta <= alpha) break;
+            }
+            return minEval;
         }
     }
 
-    // Update player rating based on game outcome
+    // Get AI move
+    function getAIMove() {
+        const moves = game.moves({ verbose: true });
+        if (moves.length === 0) {
+            isAIThinking = false;
+            updateStatus();
+            return;
+        }
+
+        let bestMove;
+        if (aiDifficulty === 15) {
+            if (!stockfish) {
+                showError('Stockfish not initialized, using basic move');
+                bestMove = moves[0];
+                game.move(bestMove);
+                moveStack.push({ fen: game.fen(), move: bestMove.san });
+                updateBoard();
+                isAIThinking = false;
+                checkGameOver();
+            } else {
+                stockfish.postMessage(`position fen ${game.fen()}`);
+                stockfish.postMessage("go movetime 500"); // 500ms for ~2700 Elo
+                // Response handled in handleStockfishMessage
+            }
+        } else {
+            const timeLimit = aiDifficulty * 100; // 100ms per level up to 1400ms
+            const startTime = Date.now();
+            let bestScore = game.turn() === 'w' ? -Infinity : Infinity;
+            for (const move of moves) {
+                const tempGame = new Chess(game.fen());
+                tempGame.move(move);
+                const score = minimax(tempGame, aiDifficulty - 1, -Infinity, Infinity, game.turn() === 'b', startTime, timeLimit);
+                if (game.turn() === 'w' && score > bestScore) {
+                    bestScore = score;
+                    bestMove = move;
+                } else if (game.turn() === 'b' && score < bestScore) {
+                    bestScore = score;
+                    bestMove = move;
+                }
+            }
+            const randomness = Math.max(0, 15 - aiDifficulty) * 0.15;
+            if (Math.random() < randomness && moves.length > 1) {
+                bestMove = moves[Math.floor(Math.random() * moves.length)];
+            }
+            game.move(bestMove);
+            moveStack.push({ fen: game.fen(), move: bestMove.san });
+            updateBoard();
+            isAIThinking = false;
+            checkGameOver();
+        }
+    }
+
+    // Check game over and update rating
+    function checkGameOver() {
+        if (game.in_checkmate()) {
+            const winner = game.turn() === 'w' ? 'Black' : 'White';
+            alert(`Checkmate! ${winner} wins!`);
+            const outcome = playerSide === winner.toLowerCase()[0] ? 1 : 0;
+            updateRating(outcome);
+        } else if (game.in_stalemate() || game.in_draw()) {
+            alert('Game ended in a draw!');
+            updateRating(0.5);
+        }
+    }
+
+    // Update player rating
     function updateRating(outcome) {
         const aiRating = 2700;
         const expectedScore = 1 / (1 + Math.pow(10, (aiRating - playerRating) / 400));
@@ -302,7 +420,6 @@
         moveStack = [];
         selectedSquare = null;
         isAIThinking = false;
-        document.getElementById('game-result').textContent = "";
         createBoard();
         updateStatus();
     }
@@ -343,7 +460,6 @@
         playerSide = side;
         newGame();
     }
-
     // Show error
     function showError(message) {
         const errorDiv = document.getElementById('error-message');
