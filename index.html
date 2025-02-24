@@ -264,6 +264,9 @@
             return evaluateBoard(tempGame);
         }
         const moves = tempGame.moves({ verbose: true });
+        if (moves.length === 0) {
+            return evaluateBoard(tempGame);
+        }
         if (maximizingPlayer) {
             let maxEval = -Infinity;
             for (const move of moves) {
@@ -291,20 +294,24 @@
 
     // Get AI move
     function getAIMove() {
+        console.log("AI turn started");
         const moves = game.moves({ verbose: true });
         if (moves.length === 0) {
+            console.log("No moves available");
             isAIThinking = false;
             updateStatus();
             return;
         }
-        const depth = 6; // Depth 6 for ~3000 Elo approximation
-        let bestMove = null;
+        const depth = 4; // Reduced to 4 for responsiveness, still strong
+        console.log("Evaluating moves at depth:", depth);
+        let bestMove = moves[0]; // Default to first move if minimax fails
         let bestScore = game.turn() === 'w' ? -Infinity : Infinity;
 
         for (const move of moves) {
             const tempGame = new Chess(game.fen());
             tempGame.move(move);
             const score = minimax(tempGame, depth - 1, -Infinity, Infinity, game.turn() === 'b');
+            console.log(`Move ${move.from}-${move.to}: Score ${score}`);
             if (game.turn() === 'w' && score > bestScore) {
                 bestScore = score;
                 bestMove = move;
@@ -314,25 +321,29 @@
             }
         }
 
+        console.log("Best move selected:", bestMove);
         if (bestMove) {
             game.move(bestMove);
             moveStack.push({ fen: game.fen(), move: bestMove.san });
             updateBoard();
             isAIThinking = false;
             checkGameOver();
+            console.log("AI move completed");
         } else {
             showError('AI failed to find a move');
             isAIThinking = false;
             updateStatus();
+            console.log("AI failed to select a move");
         }
     }
 
     // Trigger AI move
     function triggerAIMove() {
         if (!game.game_over() && game.turn() !== playerSide && !isAIThinking) {
+            console.log("Triggering AI move");
             isAIThinking = true;
             updateStatus();
-            setTimeout(getAIMove, 300);
+            setTimeout(getAIMove, 100); // Reduced delay for faster response
         }
     }
 
