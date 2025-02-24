@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Chess vs Enhanced AI</title>
+    <title>Chess vs AI (2700 Elo)</title>
     <style>
         body {
             background-color: #1e2a44;
@@ -70,32 +70,6 @@
             margin-bottom: 10px;
             font-size: 18px;
         }
-        .timer-container {
-            display: flex;
-            justify-content: space-between;
-            width: 480px;
-            margin: 10px auto;
-        }
-        .timer {
-            background-color: #2c3e50;
-            color: white;
-            padding: 10px 20px;
-            border-radius: 8px;
-            font-size: 18px;
-            font-weight: bold;
-            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
-            min-width: 120px;
-            text-align: center;
-            transition: background-color 0.3s;
-        }
-        .timer.active {
-            background-color: #e74c3c;
-        }
-        #difficulty-select, #side-select, #timer-toggle {
-            margin-top: 10px;
-            padding: 5px;
-            font-size: 16px;
-        }
         #error-message {
             color: #ff4444;
             margin-top: 10px;
@@ -105,52 +79,48 @@
             padding: 10px;
             border-radius: 5px;
         }
+        #rating-display {
+            color: white;
+            margin-top: 10px;
+            font-size: 18px;
+        }
+        #game-result {
+            color: white;
+            margin-top: 10px;
+            font-size: 18px;
+        }
+        #side-select {
+            margin-top: 10px;
+            padding: 5px;
+            font-size: 16px;
+        }
     </style>
 </head>
 <body>
     <div class="game-container">
-        <div id="top-timer" class="timer-container"></div>
         <div id="status">White to move</div>
         <div id="chessboard"></div>
-        <div id="bottom-timer" class="timer-container"></div>
+        <div id="game-result"></div>
         <div class="controls">
             <button onclick="newGame()">NEW GAME</button>
             <button onclick="undoMove()">UNDO MOVE</button>
             <button onclick="toggleNotation()">TOGGLE NOTATION</button>
-        </div>
-        <select id="difficulty-select" onchange="setDifficulty(this.value)">
-            <option value="1">Level 1 (Easiest)</option>
-            <option value="2">Level 2</option>
-            <option value="3">Level 3</option>
-            <option value="4">Level 4</option>
-            <option value="5">Level 5</option>
-            <option value="6">Level 6</option>
-            <option value="7">Level 7</option>
-            <option value="8">Level 8</option>
-            <option value="9">Level 9</option>
-            <option value="10">Level 10</option>
-            <option value="11">Level 11</option>
-            <option value="12">Level 12</option>
-            <option value="13">Level 13</option>
-            <option value="14">Level 14</option>
-            <option value="15" selected>Level 15 (Grandmaster)</option>
-        </select>
-        <div>
-            <input type="checkbox" id="timer-toggle" onchange="toggleTimer(this.checked)">
-            <label for="timer-toggle" style="color: white;">Use Timer</label>
         </div>
         <select id="side-select" onchange="setPlayerSide(this.value)">
             <option value="w" selected>Play as White</option>
             <option value="b">Play as Black</option>
         </select>
         <div id="error-message"></div>
+        <div id="rating-display">Your Rating: 1500</div>
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+    <script src="./stockfish.js"></script> <!-- Local Stockfish.js -->
     <script>
-    let game, selectedSquare, showNotation, aiDifficulty, isAIThinking, moveStack;
-    let whiteTime = 600, blackTime = 600; // 10 minutes in seconds
-    let timerOn = false, timerInterval = null, playerSide = 'w'; // Default to White
+    let game, selectedSquare, showNotation, isAIThinking, moveStack;
+    let playerSide = 'w';
+    let playerRating = 1500; // Starting rating
+    let stockfish = null;
 
     // Chess piece symbols
     const pieceSymbols = {
@@ -158,20 +128,23 @@
         'p': '♟', 'r': '♜', 'n': '♞', 'b': '♝', 'q': '♛', 'k': '♚'
     };
 
-    // Piece values for evaluation
-    const pieceValues = { 'p': 100, 'n': 320, 'b': 330, 'r': 500, 'q': 900, 'k': 20000 };
-
-    // Initialize game on page load
+    // Initialize game and Stockfish
     window.onload = function() {
         game = new Chess();
         moveStack = [];
         selectedSquare = null;
         showNotation = false;
-        aiDifficulty = 15; // Default to hardest level
         isAIThinking = false;
+        try {
+            stockfish = new Worker('./stockfish.js');
+            stockfish.postMessage('uci');
+            stockfish.postMessage('setoption name UCI_LimitStrength value true');
+            stockfish.postMessage('setoption name UCI_Elo value 2700');
+        } catch (e) {
+            showError('Stockfish initialization error: ' + e.message);
+        }
         createBoard();
         updateStatus();
-        updateTimerDisplay();
     };
 
     // Create chessboard with dynamic orientation
@@ -239,6 +212,7 @@
                 updateBoard();
                 clearHighlights();
                 selectedSquare = null;
+                checkGameOver();
                 if (!game.game_over()) {
                     isAIThinking = true;
                     setTimeout(getAIMove, 300);
@@ -275,270 +249,51 @@
         });
     }
 
-    // Set AI difficulty
-    function setDifficulty(level) {
-        aiDifficulty = parseInt(level);
-        document.getElementById('difficulty-select').value = level;
-    }
-
-    // Enhanced evaluation function for Level 15
-    function evaluateBoard(tempGame) {
-        const board = tempGame.board();
-        let score = 0;
-
-        // Material count
-        for (let row = 0; row < 8; row++) {
-            for (let col = 0; col < 8; col++) {
-                const piece = board[row][col];
-                if (piece) {
-                    const value = pieceValues[piece.type];
-                    score += piece.color === 'w' ? value : -value;
-                }
-            }
-        }
-
-        // Mobility
-        const moves = tempGame.moves({ verbose: true });
-        score += tempGame.turn() === 'w' ? moves.length * 10 : -moves.length * 10;
-
-        // Center control
-        const centerSquares = ['d4', 'd5', 'e4', 'e5'];
-        centerSquares.forEach(square => {
-            const piece = tempGame.get(square);
-            if (piece) {
-                if (piece.color === 'w' && (piece.type === 'p' || piece.type === 'n')) score += 30;
-                if (piece.color === 'b' && (piece.type === 'p' || piece.type === 'n')) score -= 30;
-            }
-        });
-
-        // King safety
-        const whiteKing = board.flat().find(p => p && p.type === 'k' && p.color === 'w');
-        const blackKing = board.flat().find(p => p && p.type === 'k' && p.color === 'b');
-        if (whiteKing) {
-            const row = Math.floor(board.flat().indexOf(whiteKing) / 8);
-            const col = board.flat().indexOf(whiteKing) % 8;
-            score -= 10 * (Math.abs(7 - row) + Math.abs(3.5 - col)); // Favor king near back rank, center
-        }
-        if (blackKing) {
-            const row = Math.floor(board.flat().indexOf(blackKing) / 8);
-            const col = board.flat().indexOf(blackKing) % 8;
-            score += 10 * (Math.abs(0 - row) + Math.abs(3.5 - col));
-        }
-
-        // Pawn structure (doubled pawns)
-        for (let col = 0; col < 8; col++) {
-            let whitePawns = 0, blackPawns = 0;
-            for (let row = 0; row < 8; row++) {
-                const piece = board[row][col];
-                if (piece && piece.type === 'p') {
-                    if (piece.color === 'w') whitePawns++;
-                    else blackPawns++;
-                }
-            }
-            if (whitePawns > 1) score -= 20 * (whitePawns - 1);
-            if (blackPawns > 1) score += 20 * (blackPawns - 1);
-        }
-
-        // Check and checkmate
-        if (tempGame.in_checkmate()) {
-            score += tempGame.turn() === 'w' ? -10000 : 10000;
-        } else if (tempGame.in_check()) {
-            score += tempGame.turn() === 'w' ? -100 : 100;
-        }
-
-        return score;
-    }
-
-    // Move ordering for efficiency
-    function orderMoves(moves) {
-        return moves.sort((a, b) => {
-            const aScore = (a.captured ? pieceValues[a.captured] : 0) + (a.san.includes('+') ? 50 : 0) + (a.promotion ? 100 : 0);
-            const bScore = (b.captured ? pieceValues[b.captured] : 0) + (b.san.includes('+') ? 50 : 0) + (b.promotion ? 100 : 0);
-            return bScore - aScore;
-        });
-    }
-
-    // Minimax with alpha-beta pruning
-    function minimax(tempGame, depth, alpha, beta, maximizingPlayer, startTime, timeLimit) {
-        if (depth === 0 || tempGame.game_over() || (Date.now() - startTime > timeLimit)) {
-            return evaluateBoard(tempGame);
-        }
-
-        const moves = orderMoves(tempGame.moves({ verbose: true }));
-        if (maximizingPlayer) {
-            let maxEval = -Infinity;
-            for (const move of moves) {
-                const newGame = new Chess(tempGame.fen());
-                newGame.move(move);
-                const evalScore = minimax(newGame, depth - 1, alpha, beta, false, startTime, timeLimit);
-                maxEval = Math.max(maxEval, evalScore);
-                alpha = Math.max(alpha, evalScore);
-                if (beta <= alpha || Date.now() - startTime > timeLimit) break;
-            }
-            return maxEval;
-        } else {
-            let minEval = Infinity;
-            for (const move of moves) {
-                const newGame = new Chess(tempGame.fen());
-                newGame.move(move);
-                const evalScore = minimax(newGame, depth - 1, alpha, beta, true, startTime, timeLimit);
-                minEval = Math.min(minEval, evalScore);
-                beta = Math.min(beta, evalScore);
-                if (beta <= alpha || Date.now() - startTime > timeLimit) break;
-            }
-            return minEval;
-        }
-    }
-
-    // Get perfect move for Level 15
-    function getPerfectMove(tempGame) {
-        const startTime = Date.now();
-        const timeLimit = 1500; // 1.5 seconds
-        const maxDepth = 6; // Strong depth within time limit
-        let bestMove = null;
-        let bestScore = game.turn() === 'w' ? -Infinity : Infinity;
-
-        const moves = orderMoves(tempGame.moves({ verbose: true }));
-        if (moves.length === 0) return moves[0];
-
-        // Check for immediate checkmate or strong captures first
-        for (const move of moves) {
-            const newGame = new Chess(tempGame.fen());
-            newGame.move(move);
-            if (newGame.in_checkmate()) {
-                return move; // Immediate winning move
-            }
-            if (move.captured && pieceValues[move.captured] >= pieceValues.q) {
-                bestMove = move; // Prioritize capturing queens or rooks
-                bestScore = evaluateBoard(newGame);
-            }
-        }
-
-        // Iterative deepening
-        for (let depth = 1; depth <= maxDepth; depth++) {
-            let alpha = -Infinity;
-            let beta = Infinity;
-            let currentBestMove = bestMove || moves[0];
-            let currentBestScore = bestScore;
-
-            for (const move of moves) {
-                const newGame = new Chess(tempGame.fen());
-                newGame.move(move);
-                const score = minimax(newGame, depth - 1, alpha, beta, game.turn() === 'b', startTime, timeLimit);
-
-                if (game.turn() === 'w') {
-                    if (score > currentBestScore) {
-                        currentBestScore = score;
-                        currentBestMove = move;
-                    }
-                    alpha = Math.max(alpha, score);
-                } else {
-                    if (score < currentBestScore) {
-                        currentBestScore = score;
-                        currentBestMove = move;
-                    }
-                    beta = Math.min(beta, score);
-                }
-
-                if (Date.now() - startTime > timeLimit) break;
-            }
-
-            bestMove = currentBestMove;
-            bestScore = currentBestScore;
-
-            if (Date.now() - startTime > timeLimit) break;
-        }
-
-        return bestMove;
-    }
-
-    // AI move selection
+    // AI move selection with Stockfish
     function getAIMove() {
-        const moves = game.moves({ verbose: true });
-        if (moves.length === 0) {
-            isAIThinking = false;
-            updateStatus();
-            return;
-        }
-
-        let bestMove;
-        const randomness = Math.max(0, 15 - aiDifficulty) * 0.15;
-
-        if (aiDifficulty === 15) {
-            bestMove = getPerfectMove(game);
-            if (bestMove) {
-                game.move(bestMove);
-                moveStack.push({ fen: game.fen(), move: bestMove.san });
-                updateBoard();
-                isAIThinking = false;
-                checkGameOver();
-            } else {
-                showError('No valid move found');
-                isAIThinking = false;
+        stockfish.postMessage(`position fen ${game.fen()}`);
+        stockfish.postMessage("go movetime 500"); // 500ms for ~2700 Elo
+        stockfish.onmessage = function(event) {
+            const message = event.data;
+            if (message.startsWith("bestmove")) {
+                const moveStr = message.split(" ")[1];
+                const move = game.move({ from: moveStr.substr(0,2), to: moveStr.substr(2,2), promotion: 'q' });
+                if (move) {
+                    moveStack.push({ fen: game.fen(), move: move.san });
+                    updateBoard();
+                    isAIThinking = false;
+                    checkGameOver();
+                } else {
+                    showError('Invalid move from Stockfish');
+                    isAIThinking = false;
+                }
             }
-        } else if (aiDifficulty <= 3) {
-            const evaluatedMoves = moves.map(move => ({
-                move,
-                value: move.captured ? pieceValues[move.captured] : 0
-            }));
-            evaluatedMoves.sort((a, b) => b.value - a.value);
-            const topMoves = evaluatedMoves.slice(0, Math.min(5, evaluatedMoves.length));
-            bestMove = topMoves[Math.floor(Math.random() * topMoves.length)].move;
-            game.move(bestMove);
-            moveStack.push({ fen: game.fen(), move: bestMove.san });
-            updateBoard();
-            isAIThinking = false;
-            checkGameOver();
-        } else if (aiDifficulty <= 6) {
-            const evaluatedMoves = moves.map(move => {
-                const tempGame = new Chess(game.fen());
-                tempGame.move(move);
-                return { move, value: evaluateBoard(tempGame) };
-            });
-            evaluatedMoves.sort((a, b) => game.turn() === 'w' ? b.value - a.value : a.value - b.value);
-            bestMove = Math.random() > randomness ?
-                evaluatedMoves[0].move :
-                moves[Math.floor(Math.random() * moves.length)];
-            game.move(bestMove);
-            moveStack.push({ fen: game.fen(), move: bestMove.san });
-            updateBoard();
-            isAIThinking = false;
-            checkGameOver();
-        } else {
-            const depth = 2;
-            const evaluatedMoves = moves.map(move => {
-                const tempGame = new Chess(game.fen());
-                tempGame.move(move);
-                const score = evaluateBoard(tempGame);
-                return { move, value: score };
-            });
-            evaluatedMoves.sort((a, b) => game.turn() === 'w' ? b.value - a.value : a.value - b.value);
-            bestMove = Math.random() > randomness ?
-                evaluatedMoves[0].move :
-                moves[Math.floor(Math.random() * moves.length)];
-            game.move(bestMove);
-            moveStack.push({ fen: game.fen(), move: bestMove.san });
-            updateBoard();
-            isAIThinking = false;
-            checkGameOver();
-        }
+        };
     }
 
-    // Check game over conditions
+    // Check game over conditions and update rating
     function checkGameOver() {
         if (game.in_checkmate()) {
-            const winner = game.turn() === 'w' ? 'Black' : 'White';
-            alert(`Checkmate! ${winner} wins!`);
-            stopTimer();
-        } else if (game.in_stalemate() || game.in_draw()) {
-            alert('Game ended in a draw!');
-            stopTimer();
-        } else if (timerOn && (whiteTime <= 0 || blackTime <= 0)) {
-            const winner = whiteTime <= 0 ? 'Black' : 'White';
-            alert(`Time's up! ${winner} wins!`);
-            stopTimer();
-            game.game_over = () => true;
+            if (game.turn() === playerSide) {
+                document.getElementById('game-result').textContent = "Checkmate! You lost.";
+                updateRating(0); // Player loses
+            } else {
+                document.getElementById('game-result').textContent = "Checkmate! You won.";
+                updateRating(1); // Player wins
+            }
+        } else if (game.in_stalemate() || game.in_threefold_repetition() || game.insufficient_material()) {
+            document.getElementById('game-result').textContent = "Draw!";
+            updateRating(0.5); // Draw
         }
+    }
+
+    // Update player rating based on game outcome
+    function updateRating(outcome) {
+        const aiRating = 2700;
+        const expectedScore = 1 / (1 + Math.pow(10, (aiRating - playerRating) / 400));
+        playerRating += 32 * (outcome - expectedScore);
+        playerRating = Math.round(playerRating);
+        document.getElementById('rating-display').textContent = `Your Rating: ${playerRating}`;
     }
 
     // Start new game
@@ -547,12 +302,9 @@
         moveStack = [];
         selectedSquare = null;
         isAIThinking = false;
-        whiteTime = 600;
-        blackTime = 600;
+        document.getElementById('game-result').textContent = "";
         createBoard();
         updateStatus();
-        updateTimerDisplay();
-        if (timerOn) startTimer();
     }
 
     // Undo move
@@ -580,61 +332,9 @@
             return;
         }
         if (game.game_over()) {
-            statusDiv.textContent = game.in_checkmate() ? 
-                `Checkmate! ${game.turn() === 'w' ? 'Black' : 'White'} wins!` : 
-                game.in_stalemate() ? 'Stalemate!' : game.in_draw() ? 'Draw!' : 'Game over!';
+            statusDiv.textContent = 'Game over';
         } else {
             statusDiv.textContent = `${game.turn() === 'w' ? 'White' : 'Black'} to move${game.in_check() ? ' (in check)' : ''}`;
-        }
-    }
-
-    // Timer functions
-    function updateTimerDisplay() {
-        const whiteMins = Math.floor(whiteTime / 60);
-        const whiteSecs = Math.floor(whiteTime % 60).toString().padStart(2, '0');
-        const blackMins = Math.floor(blackTime / 60);
-        const blackSecs = Math.floor(blackTime % 60).toString().padStart(2, '0');
-        const topTimer = document.getElementById('top-timer');
-        const bottomTimer = document.getElementById('bottom-timer');
-        topTimer.innerHTML = playerSide === 'w' ? 
-            `<div id="white-timer" class="timer">White: ${whiteMins}:${whiteSecs}</div>` : 
-            `<div id="black-timer" class="timer">Black: ${blackMins}:${blackSecs}</div>`;
-        bottomTimer.innerHTML = playerSide === 'w' ? 
-            `<div id="black-timer" class="timer">Black: ${blackMins}:${blackSecs}</div>` : 
-            `<div id="white-timer" class="timer">White: ${whiteMins}:${whiteSecs}</div>`;
-        document.getElementById('white-timer').classList.toggle('active', timerOn && game.turn() === 'w');
-        document.getElementById('black-timer').classList.toggle('active', timerOn && game.turn() === 'b');
-    }
-
-    function startTimer() {
-        stopTimer();
-        timerInterval = setInterval(() => {
-            if (!game.game_over() && !isAIThinking) {
-                if (game.turn() === 'w') {
-                    whiteTime = Math.max(0, whiteTime - 1);
-                } else {
-                    blackTime = Math.max(0, blackTime - 1);
-                }
-                updateTimerDisplay();
-                checkGameOver();
-            }
-        }, 1000);
-    }
-
-    function stopTimer() {
-        if (timerInterval) {
-            clearInterval(timerInterval);
-            timerInterval = null;
-        }
-        updateTimerDisplay();
-    }
-
-    function toggleTimer(checked) {
-        timerOn = checked;
-        if (timerOn && !game.game_over()) {
-            startTimer();
-        } else {
-            stopTimer();
         }
     }
 
