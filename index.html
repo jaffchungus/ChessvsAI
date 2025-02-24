@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Chess vs AI (Levels 1-15, Rated)</title>
+    <title>Chess vs AI (Bullet-Ready, Magnus-Level)</title>
     <style>
         body {
             background-color: #1e2a44;
@@ -115,7 +115,7 @@
             <option value="12">Level 12</option>
             <option value="13">Level 13</option>
             <option value="14">Level 14</option>
-            <option value="15" selected>Level 15 (Hardest)</option>
+            <option value="15" selected>Level 15 (Magnus-Level)</option>
         </select>
         <select id="side-select" onchange="setPlayerSide(this.value)">
             <option value="w" selected>Play as White</option>
@@ -131,28 +131,12 @@
     let game, selectedSquare, showNotation, aiDifficulty, isAIThinking, moveStack, stockfish;
     let playerSide = 'w';
     let playerRating = 1500;
-    let stockfishInitialized = false;
 
     // Chess piece symbols
     const pieceSymbols = {
         'P': '♙', 'R': '♖', 'N': '♘', 'B': '♗', 'Q': '♕', 'K': '♔',
         'p': '♟', 'r': '♜', 'n': '♞', 'b': '♝', 'q': '♛', 'k': '♚'
     };
-
-    // Piece values for fallback AI
-    const pieceValues = { 'p': 100, 'n': 320, 'b': 330, 'r': 500, 'q': 900, 'k': 20000 };
-
-    // Piece-square table for fallback AI (simplified)
-    const pawnPST = [
-        0,  0,  0,  0,  0,  0,  0,  0,
-        50, 50, 50, 50, 50, 50, 50, 50,
-        10, 10, 20, 30, 30, 20, 10, 10,
-        5,  5, 10, 25, 25, 10,  5,  5,
-        0,  0,  0, 20, 20,  0,  0,  0,
-        5, -5,-10,  0,  0,-10, -5,  5,
-        5, 10, 10,-20,-20, 10, 10,  5,
-        0,  0,  0,  0,  0,  0,  0,  0
-    ];
 
     // Initialize game and Stockfish
     window.onload = function() {
@@ -165,13 +149,14 @@
         try {
             stockfish = new Worker('./stockfish.js');
             stockfish.postMessage('uci');
+            stockfish.postMessage('setoption name Threads value 4'); // Use 4 threads if supported
+            stockfish.postMessage('setoption name Hash value 128'); // 128MB hash for speed/strength
             stockfish.onmessage = handleStockfishMessage;
-            stockfishInitialized = true;
             console.log("Stockfish initialized successfully");
         } catch (e) {
             showError('Stockfish failed to initialize: ' + e.message);
             console.error("Stockfish initialization error:", e);
-            stockfishInitialized = false;
+            newGame(); // Reset on failure
         }
         createBoard();
         updateStatus();
@@ -195,8 +180,8 @@
                 checkGameOver();
             } else {
                 console.error("Invalid move from Stockfish:", moveStr);
-                showError('Invalid move from Stockfish, using fallback');
-                makeFallbackMove();
+                showError('Stockfish error, resetting game');
+                newGame();
             }
         }
     }
@@ -223,21 +208,20 @@
         updateBoard();
     }
 
-    // Update board state
+    // Update board state (optimized)
     function updateBoard() {
         if (!game) return;
         const boardState = game.board();
-        for (let row = 0; row < 8; row++) {
-            for (let col = 0; col < 8; col++) {
-                const square = document.querySelector(`[data-pos="${String.fromCharCode(97 + col)}${8 - row}"]`);
-                if (!square) continue;
-                const pieceDiv = square.querySelector('.piece');
-                const notationSpan = square.querySelector('.notation');
-                const piece = boardState[row][col];
-                pieceDiv.textContent = piece ? pieceSymbols[piece.color === 'w' ? piece.type.toUpperCase() : piece.type] : '';
-                notationSpan.style.display = showNotation ? 'block' : 'none';
-            }
-        }
+        const squares = document.querySelectorAll('.square');
+        squares.forEach((square, i) => {
+            const row = Math.floor(i / 8);
+            const col = i % 8;
+            const pieceDiv = square.querySelector('.piece');
+            const notationSpan = square.querySelector('.notation');
+            const piece = boardState[row][col];
+            pieceDiv.textContent = piece ? pieceSymbols[piece.color === 'w' ? piece.type.toUpperCase() : piece.type] : '';
+            notationSpan.style.display = showNotation ? 'block' : 'none';
+        });
         updateStatus();
     }
 
@@ -297,91 +281,7 @@
         document.getElementById('difficulty-select').value = level;
     }
 
-    // Fallback AI evaluation
-    function evaluateBoard(tempGame) {
-        const board = tempGame.board();
-        let score = 0;
-        for (let row = 0; row < 8; row++) {
-            for (let col = 0; col < 8; col++) {
-                const piece = board[row][col];
-                if (piece) {
-                    const value = pieceValues[piece.type];
-                    const index = piece.color === 'w' ? row * 8 + col : (7 - row) * 8 + (7 - col);
-                    score += piece.color === 'w' ? value + pawnPST[index] : -(value + pawnPST[index]);
-                }
-            }
-        }
-        return score;
-    }
-
-    // Fallback minimax with alpha-beta pruning (reduced depth)
-    function minimax(tempGame, depth, alpha, beta, maximizingPlayer, startTime, timeLimit) {
-        if (depth === 0 || tempGame.game_over() || (Date.now() - startTime > timeLimit)) {
-            return evaluateBoard(tempGame);
-        }
-        const moves = tempGame.moves({ verbose: true });
-        if (maximizingPlayer) {
-            let maxEval = -Infinity;
-            for (const move of moves) {
-                const newGame = new Chess(tempGame.fen());
-                newGame.move(move);
-                const evalScore = minimax(newGame, depth - 1, alpha, beta, false, startTime, timeLimit);
-                maxEval = Math.max(maxEval, evalScore);
-                alpha = Math.max(alpha, evalScore);
-                if (beta <= alpha) break;
-            }
-            return maxEval;
-        } else {
-            let minEval = Infinity;
-            for (const move of moves) {
-                const newGame = new Chess(tempGame.fen());
-                newGame.move(move);
-                const evalScore = minimax(newGame, depth - 1, alpha, beta, true, startTime, timeLimit);
-                minEval = Math.min(minEval, evalScore);
-                beta = Math.min(beta, evalScore);
-                if (beta <= alpha) break;
-            }
-            return minEval;
-        }
-    }
-
-    // Fallback move (faster with depth 2)
-    function makeFallbackMove() {
-        const moves = game.moves({ verbose: true });
-        if (moves.length === 0) {
-            isAIThinking = false;
-            updateStatus();
-            return;
-        }
-        const timeLimit = 50;
-        const startTime = Date.now();
-        let bestMove = null;
-        let bestScore = game.turn() === 'w' ? -Infinity : Infinity;
-        const depth = 2; // Reduced for speed
-
-        for (const move of moves) {
-            const tempGame = new Chess(game.fen());
-            tempGame.move(move);
-            const score = minimax(tempGame, depth - 1, -Infinity, Infinity, game.turn() === 'b', startTime, timeLimit);
-            if (game.turn() === 'w' && score > bestScore) {
-                bestScore = score;
-                bestMove = move;
-            } else if (game.turn() === 'b' && score < bestScore) {
-                bestScore = score;
-                bestMove = move;
-            }
-        }
-
-        if (bestMove) {
-            game.move(bestMove);
-            moveStack.push({ fen: game.fen(), move: bestMove.san });
-            updateBoard();
-            isAIThinking = false;
-            checkGameOver();
-        }
-    }
-
-    // Get AI move with Stockfish (faster)
+    // Get AI move with Stockfish (ultra-fast)
     function getAIMove() {
         const moves = game.moves({ verbose: true });
         if (moves.length === 0) {
@@ -389,29 +289,17 @@
             updateStatus();
             return;
         }
-
-        if (stockfishInitialized) {
-            const skillLevel = Math.floor((aiDifficulty - 1) * 20 / 14);
-            const movetime = 50; // Fixed low time for speed
-            stockfish.postMessage(`setoption name Skill Level value ${skillLevel}`);
-            stockfish.postMessage(`position fen ${game.fen()}`);
-            stockfish.postMessage(`go movetime ${movetime}`);
-            setTimeout(() => {
-                if (isAIThinking) {
-                    showError('Stockfish did not respond, using fallback');
-                    makeFallbackMove();
-                }
-            }, 100); // Tight timeout
-        } else {
-            makeFallbackMove();
-        }
+        const skillLevel = Math.floor((aiDifficulty - 1) * 20 / 14);
+        stockfish.postMessage(`setoption name Skill Level value ${skillLevel}`);
+        stockfish.postMessage(`position fen ${game.fen()}`);
+        stockfish.postMessage('go movetime 5'); // 5ms for bullet speed
     }
 
-    // Trigger AI move (no delay)
+    // Trigger AI move (instant)
     function triggerAIMove() {
         if (!game.game_over() && game.turn() !== playerSide && !isAIThinking) {
             isAIThinking = true;
-            getAIMove(); // Immediate execution
+            getAIMove();
         }
     }
 
@@ -430,7 +318,7 @@
 
     // Update player rating
     function updateRating(outcome) {
-        const aiRating = 2700;
+        const aiRating = 3500; // Reflects Stockfish level 15 strength
         const expectedScore = 1 / (1 + Math.pow(10, (aiRating - playerRating) / 400));
         playerRating += 32 * (outcome - expectedScore);
         playerRating = Math.round(playerRating);
