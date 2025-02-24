@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Chess vs AI (Levels 1-15, Rated)</title>
+    <title>Chess vs AI (Levels 1-15, Rated with MCTS)</title>
     <style>
         body {
             background-color: #1e2a44;
@@ -141,18 +141,6 @@
     // Piece values for evaluation
     const pieceValues = { 'p': 100, 'n': 320, 'b': 330, 'r': 500, 'q': 900, 'k': 20000 };
 
-    // Pawn piece-square table (white perspective, flipped for black)
-    const pawnPST = [
-        0,  0,  0,  0,  0,  0,  0,  0,
-        50, 50, 50, 50, 50, 50, 50, 50,
-        10, 10, 20, 30, 30, 20, 10, 10,
-        5,  5, 10, 25, 25, 10,  5,  5,
-        0,  0,  0, 20, 20,  0,  0,  0,
-        5, -5,-10,  0,  0,-10, -5,  5,
-        5, 10, 10,-20,-20, 10, 10,  5,
-        0,  0,  0,  0,  0,  0,  0,  0
-    ];
-
     // Elo ratings for each level
     const eloRatings = {
         1: 1600, 2: 1700, 3: 1800, 4: 1900, 5: 2000,
@@ -271,72 +259,112 @@
         console.log(`Set AI difficulty to Level ${level} (${eloRatings[level]} Elo)`);
     }
 
-    // Evaluate board position
+    // Evaluate board position (simple for rollout)
     function evaluateBoard(tempGame) {
         if (tempGame.in_checkmate()) {
-            return tempGame.turn() === 'w' ? -100000 : 100000; // Checkmate
+            return tempGame.turn() === 'w' ? -10000 : 10000;
         }
         if (tempGame.in_draw()) return 0;
 
         const board = tempGame.board();
         let score = 0;
-
-        // Material and positional evaluation
         for (let row = 0; row < 8; row++) {
             for (let col = 0; col < 8; col++) {
                 const piece = board[row][col];
                 if (piece) {
                     const value = pieceValues[piece.type];
-                    const index = piece.color === 'w' ? row * 8 + col : (7 - row) * 8 + (7 - col);
-                    score += piece.color === 'w' ? value + (piece.type === 'p' ? pawnPST[index] : 0) : -(value + (piece.type === 'p' ? pawnPST[index] : 0));
+                    score += piece.color === 'w' ? value : -value;
                 }
             }
         }
-
-        // Bonus for king safety and center control
-        if (tempGame.in_check()) {
-            score += tempGame.turn() === 'w' ? -50 : 50;
-        }
+        // Bonus for captures and checks
+        if (tempGame.in_check()) score += tempGame.turn() === 'w' ? -50 : 50;
         return score;
     }
 
-    // Minimax with alpha-beta pruning
-    function minimax(tempGame, depth, alpha, beta, isMaximizing) {
-        if (depth === 0 || tempGame.game_over()) {
-            return evaluateBoard(tempGame);
+    // MCTS Node
+    class MCTSNode {
+        constructor(state, move = null, parent = null) {
+            this.state = state; // Chess.js instance
+            this.move = move; // Move that led to this state
+            this.parent = parent;
+            this.children = [];
+            this.visits = 0;
+            this.wins = 0; // Score accumulator
+            this.untriedMoves = state.moves({ verbose: true });
         }
 
-        const moves = tempGame.moves({ verbose: true });
-        if (moves.length === 0) {
-            return evaluateBoard(tempGame);
+        isFullyExpanded() {
+            return this.untriedMoves.length === 0;
         }
 
-        if (isMaximizing) {
-            let maxEval = -Infinity;
-            for (const move of moves) {
-                const newGame = new Chess(tempGame.fen());
-                newGame.move(move);
-                const evalScore = minimax(newGame, depth - 1, alpha, beta, false);
-                maxEval = Math.max(maxEval, evalScore);
-                alpha = Math.max(alpha, evalScore);
-                if (beta <= alpha) break; // Alpha-beta cutoff
+        bestChild(c = 1.414) { // UCT formula constant
+            return this.children.reduce((best, child) => {
+                const ucb = (child.wins / child.visits) + c * Math.sqrt(2 * Math.log(this.visits) / child.visits);
+                return ucb > (best.wins / best.visits + c * Math.sqrt(2 * Math.log(this.visits) / best.visits)) ? child : best;
+            });
+        }
+
+        rollout() {
+            let simGame = new Chess(this.state.fen());
+            while (!simGame.game_over() && simGame.moves().length > 0) {
+                const moves = simGame.moves({ verbose: true });
+                const move = moves[Math.floor(Math.random() * moves.length)];
+                simGame.move(move);
             }
-            return maxEval;
-        } else {
-            let minEval = Infinity;
-            for (const move of moves) {
-                const newGame = new Chess(tempGame.fen());
-                newGame.move(move);
-                const evalScore = minimax(newGame, depth - 1, alpha, beta, true);
-                minEval = Math.min(minEval, evalScore);
-                beta = Math.min(beta, evalScore);
-                if (beta <= alpha) break; // Alpha-beta cutoff
-            }
-            return minEval;
+            const score = evaluateBoard(simGame);
+            return simGame.turn() === 'w' ? -score : score; // Adjust for AI's perspective
+        }
+
+        expand() {
+            const move = this.untriedMoves.pop();
+            const childState = new Chess(this.state.fen());
+            childState.move(move);
+            const child = new MCTSNode(childState, move, this);
+            this.children.push(child);
+            return child;
+        }
+
+        update(result) {
+            this.visits += 1;
+            this.wins += result;
         }
     }
 
-    // Get AI move
+    // MCTS algorithm
+    function mctsSearch(rootState, iterations) {
+        const root = new MCTSNode(rootState);
+        const aiColor = playerSide === 'w' ? 'b' : 'w';
+
+        for (let i = 0; i < iterations; i++) {
+            let node = root;
+
+            // Selection
+            while (node.isFullyExpanded() && node.children.length > 0) {
+                node = node.bestChild();
+            }
+
+            // Expansion
+            if (!node.isFullyExpanded()) {
+                node = node.expand();
+            }
+
+            // Simulation
+            const result = node.rollout();
+
+            // Backpropagation
+            while (node !== null) {
+                node.update(result > 0 ? 1 : (result < 0 ? -1 : 0)); // Win = 1, Loss = -1, Draw = 0
+                node = node.parent;
+            }
+        }
+
+        // Return the most visited child’s move
+        const bestChild = root.children.reduce((best, child) => child.visits > best.visits ? child : best);
+        return bestChild.move;
+    }
+
+    // Get AI move using MCTS
     function getAIMove() {
         console.log("AI turn started, turn:", game.turn(), "difficulty:", aiDifficulty);
         const moves = game.moves({ verbose: true });
@@ -347,28 +375,13 @@
             return;
         }
 
-        // Cap depth at 6 for responsiveness, scale from 1-6 for levels 1-15
-        const maxDepth = Math.min(aiDifficulty, 6); // Cap at 6 for performance
-        const depth = Math.ceil(maxDepth * (aiDifficulty / 15)); // Scale depth proportionally
-        console.log("Evaluating moves at depth:", depth);
+        // Scale iterations based on difficulty (50 to 1500)
+        const iterations = 50 + (aiDifficulty - 1) * 100; // Level 1: 50, Level 15: 1500
+        console.log("Running MCTS with iterations:", iterations);
 
-        let bestMove = moves[0]; // Default to first move
-        let bestScore = -Infinity;
-        const aiColor = playerSide === 'w' ? 'b' : 'w'; // AI plays opposite side
-        const isMaximizing = game.turn() === aiColor;
+        const bestMove = mctsSearch(game, iterations);
+        console.log("Best move selected:", bestMove.from, "-", bestMove.to, "Visits:", bestMove.parent.children.find(c => c.move === bestMove).visits);
 
-        for (const move of moves) {
-            const tempGame = new Chess(game.fen());
-            tempGame.move(move);
-            const score = minimax(tempGame, depth - 1, -Infinity, Infinity, !isMaximizing);
-            console.log(`Move ${move.from}-${move.to}: Score ${score}`);
-            if (isMaximizing ? score > bestScore : score < bestScore) {
-                bestScore = score;
-                bestMove = move;
-            }
-        }
-
-        console.log("Best move selected:", bestMove.from, "-", bestMove.to, "Score:", bestScore);
         game.move(bestMove);
         moveStack.push({ fen: game.fen(), move: bestMove.san });
         updateBoard();
@@ -383,7 +396,7 @@
             console.log("Triggering AI move");
             isAIThinking = true;
             updateStatus();
-            setTimeout(getAIMove, 100); // Small delay for UI responsiveness
+            setTimeout(getAIMove, 100);
         } else {
             console.log("AI move not triggered:", { gameOver: game.game_over(), turn: game.turn(), playerSide, isAIThinking });
         }
