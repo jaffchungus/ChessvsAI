@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Chess vs Komodo-like AI (Rated 3000)</title>
+    <title>Chess vs AI (Levels 1-15, Rated)</title>
     <style>
         body {
             background-color: #1e2a44;
@@ -70,7 +70,7 @@
             margin-bottom: 10px;
             font-size: 18px;
         }
-        #side-select {
+        #difficulty-select, #side-select {
             margin-top: 10px;
             padding: 5px;
             font-size: 16px;
@@ -100,6 +100,23 @@
             <button onclick="undoMove()">UNDO MOVE</button>
             <button onclick="toggleNotation()">TOGGLE NOTATION</button>
         </div>
+        <select id="difficulty-select" onchange="setDifficulty(this.value)">
+            <option value="1">Level 1 (1600)</option>
+            <option value="2">Level 2 (1700)</option>
+            <option value="3">Level 3 (1800)</option>
+            <option value="4">Level 4 (1900)</option>
+            <option value="5">Level 5 (2000)</option>
+            <option value="6">Level 6 (2100)</option>
+            <option value="7">Level 7 (2200)</option>
+            <option value="8">Level 8 (2300)</option>
+            <option value="9">Level 9 (2400)</option>
+            <option value="10">Level 10 (2500)</option>
+            <option value="11">Level 11 (2600)</option>
+            <option value="12">Level 12 (2700)</option>
+            <option value="13">Level 13 (2800)</option>
+            <option value="14">Level 14 (2900)</option>
+            <option value="15" selected>Level 15 (3000)</option>
+        </select>
         <select id="side-select" onchange="setPlayerSide(this.value)">
             <option value="w" selected>Play as White</option>
             <option value="b">Play as Black</option>
@@ -113,6 +130,7 @@
     let game, selectedSquare, showNotation, isAIThinking, moveStack;
     let playerSide = 'w';
     let playerRating = 1500;
+    let aiDifficulty = 15; // Default to Level 15 (3000 Elo)
 
     // Chess piece symbols
     const pieceSymbols = {
@@ -120,12 +138,10 @@
         'p': '♟', 'r': '♜', 'n': '♞', 'b': '♝', 'q': '♛', 'k': '♚'
     };
 
-    // Piece values for AI evaluation
-    const pieceValues = {
-        'p': 100, 'n': 320, 'b': 330, 'r': 500, 'q': 900, 'k': 20000
-    };
+    // Piece values for evaluation
+    const pieceValues = { 'p': 100, 'n': 320, 'b': 330, 'r': 500, 'q': 900, 'k': 20000 };
 
-    // Simplified piece-square table for pawns
+    // Pawn piece-square table
     const pawnPST = [
         0,  0,  0,  0,  0,  0,  0,  0,
         50, 50, 50, 50, 50, 50, 50, 50,
@@ -136,6 +152,13 @@
         5, 10, 10,-20,-20, 10, 10,  5,
         0,  0,  0,  0,  0,  0,  0,  0
     ];
+
+    // Elo ratings for each level
+    const eloRatings = {
+        1: 1600, 2: 1700, 3: 1800, 4: 1900, 5: 2000,
+        6: 2100, 7: 2200, 8: 2300, 9: 2400, 10: 2500,
+        11: 2600, 12: 2700, 13: 2800, 14: 2900, 15: 3000
+    };
 
     // Initialize game
     window.onload = function() {
@@ -241,8 +264,20 @@
         });
     }
 
-    // Evaluate board for AI
+    // Set AI difficulty
+    function setDifficulty(level) {
+        aiDifficulty = parseInt(level);
+        document.getElementById('difficulty-select').value = level;
+        console.log(`Set AI difficulty to Level ${level} (${eloRatings[level]} Elo)`);
+    }
+
+    // Evaluate board position
     function evaluateBoard(tempGame) {
+        if (tempGame.in_checkmate()) {
+            return tempGame.turn() === 'w' ? -100000 : 100000; // Huge score for checkmate
+        }
+        if (tempGame.in_draw()) return 0;
+
         const board = tempGame.board();
         let score = 0;
         for (let row = 0; row < 8; row++) {
@@ -259,15 +294,17 @@
     }
 
     // Minimax with alpha-beta pruning
-    function minimax(tempGame, depth, alpha, beta, maximizingPlayer) {
+    function minimax(tempGame, depth, alpha, beta, isMaximizing) {
         if (depth === 0 || tempGame.game_over()) {
             return evaluateBoard(tempGame);
         }
+
         const moves = tempGame.moves({ verbose: true });
         if (moves.length === 0) {
             return evaluateBoard(tempGame);
         }
-        if (maximizingPlayer) {
+
+        if (isMaximizing) {
             let maxEval = -Infinity;
             for (const move of moves) {
                 const newGame = new Chess(tempGame.fen());
@@ -294,7 +331,7 @@
 
     // Get AI move
     function getAIMove() {
-        console.log("AI turn started");
+        console.log("AI turn started, turn:", game.turn(), "difficulty:", aiDifficulty);
         const moves = game.moves({ verbose: true });
         if (moves.length === 0) {
             console.log("No moves available");
@@ -302,39 +339,32 @@
             updateStatus();
             return;
         }
-        const depth = 4; // Reduced to 4 for responsiveness, still strong
-        console.log("Evaluating moves at depth:", depth);
-        let bestMove = moves[0]; // Default to first move if minimax fails
-        let bestScore = game.turn() === 'w' ? -Infinity : Infinity;
 
+        const depth = aiDifficulty; // Depth matches level (1-15)
+        console.log("Evaluating moves at depth:", depth);
+        let bestMove = moves[0]; // Fallback to first move
+        let bestScore = -Infinity;
+
+        // AI maximizes (adjusting for its color)
+        const isMaximizing = game.turn() === 'b' ? playerSide === 'w' : playerSide === 'b';
         for (const move of moves) {
             const tempGame = new Chess(game.fen());
             tempGame.move(move);
-            const score = minimax(tempGame, depth - 1, -Infinity, Infinity, game.turn() === 'b');
+            const score = minimax(tempGame, depth - 1, -Infinity, Infinity, !isMaximizing);
             console.log(`Move ${move.from}-${move.to}: Score ${score}`);
-            if (game.turn() === 'w' && score > bestScore) {
-                bestScore = score;
-                bestMove = move;
-            } else if (game.turn() === 'b' && score < bestScore) {
+            if (score > bestScore) {
                 bestScore = score;
                 bestMove = move;
             }
         }
 
-        console.log("Best move selected:", bestMove);
-        if (bestMove) {
-            game.move(bestMove);
-            moveStack.push({ fen: game.fen(), move: bestMove.san });
-            updateBoard();
-            isAIThinking = false;
-            checkGameOver();
-            console.log("AI move completed");
-        } else {
-            showError('AI failed to find a move');
-            isAIThinking = false;
-            updateStatus();
-            console.log("AI failed to select a move");
-        }
+        console.log("Best move selected:", bestMove.from, "-", bestMove.to, "Score:", bestScore);
+        game.move(bestMove);
+        moveStack.push({ fen: game.fen(), move: bestMove.san });
+        updateBoard();
+        isAIThinking = false;
+        checkGameOver();
+        console.log("AI move completed");
     }
 
     // Trigger AI move
@@ -343,7 +373,7 @@
             console.log("Triggering AI move");
             isAIThinking = true;
             updateStatus();
-            setTimeout(getAIMove, 100); // Reduced delay for faster response
+            setTimeout(getAIMove, 100);
         }
     }
 
@@ -362,7 +392,7 @@
 
     // Update player rating
     function updateRating(outcome) {
-        const aiRating = 3000; // AI set to ~3000 Elo
+        const aiRating = eloRatings[aiDifficulty]; // Use current difficulty’s Elo
         const expectedScore = 1 / (1 + Math.pow(10, (aiRating - playerRating) / 400));
         playerRating += 32 * (outcome - expectedScore);
         playerRating = Math.round(playerRating);
