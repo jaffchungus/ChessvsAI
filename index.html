@@ -141,7 +141,7 @@
     // Piece values for evaluation
     const pieceValues = { 'p': 100, 'n': 320, 'b': 330, 'r': 500, 'q': 900, 'k': 20000 };
 
-    // Pawn piece-square table
+    // Pawn piece-square table (white perspective, flipped for black)
     const pawnPST = [
         0,  0,  0,  0,  0,  0,  0,  0,
         50, 50, 50, 50, 50, 50, 50, 50,
@@ -274,12 +274,14 @@
     // Evaluate board position
     function evaluateBoard(tempGame) {
         if (tempGame.in_checkmate()) {
-            return tempGame.turn() === 'w' ? -100000 : 100000; // Huge score for checkmate
+            return tempGame.turn() === 'w' ? -100000 : 100000; // Checkmate
         }
         if (tempGame.in_draw()) return 0;
 
         const board = tempGame.board();
         let score = 0;
+
+        // Material and positional evaluation
         for (let row = 0; row < 8; row++) {
             for (let col = 0; col < 8; col++) {
                 const piece = board[row][col];
@@ -289,6 +291,11 @@
                     score += piece.color === 'w' ? value + (piece.type === 'p' ? pawnPST[index] : 0) : -(value + (piece.type === 'p' ? pawnPST[index] : 0));
                 }
             }
+        }
+
+        // Bonus for king safety and center control
+        if (tempGame.in_check()) {
+            score += tempGame.turn() === 'w' ? -50 : 50;
         }
         return score;
     }
@@ -312,7 +319,7 @@
                 const evalScore = minimax(newGame, depth - 1, alpha, beta, false);
                 maxEval = Math.max(maxEval, evalScore);
                 alpha = Math.max(alpha, evalScore);
-                if (beta <= alpha) break;
+                if (beta <= alpha) break; // Alpha-beta cutoff
             }
             return maxEval;
         } else {
@@ -323,7 +330,7 @@
                 const evalScore = minimax(newGame, depth - 1, alpha, beta, true);
                 minEval = Math.min(minEval, evalScore);
                 beta = Math.min(beta, evalScore);
-                if (beta <= alpha) break;
+                if (beta <= alpha) break; // Alpha-beta cutoff
             }
             return minEval;
         }
@@ -340,19 +347,22 @@
             return;
         }
 
-        const depth = aiDifficulty; // Depth matches level (1-15)
+        // Cap depth at 6 for responsiveness, scale from 1-6 for levels 1-15
+        const maxDepth = Math.min(aiDifficulty, 6); // Cap at 6 for performance
+        const depth = Math.ceil(maxDepth * (aiDifficulty / 15)); // Scale depth proportionally
         console.log("Evaluating moves at depth:", depth);
-        let bestMove = moves[0]; // Fallback to first move
-        let bestScore = -Infinity;
 
-        // AI maximizes (adjusting for its color)
-        const isMaximizing = game.turn() === 'b' ? playerSide === 'w' : playerSide === 'b';
+        let bestMove = moves[0]; // Default to first move
+        let bestScore = -Infinity;
+        const aiColor = playerSide === 'w' ? 'b' : 'w'; // AI plays opposite side
+        const isMaximizing = game.turn() === aiColor;
+
         for (const move of moves) {
             const tempGame = new Chess(game.fen());
             tempGame.move(move);
             const score = minimax(tempGame, depth - 1, -Infinity, Infinity, !isMaximizing);
             console.log(`Move ${move.from}-${move.to}: Score ${score}`);
-            if (score > bestScore) {
+            if (isMaximizing ? score > bestScore : score < bestScore) {
                 bestScore = score;
                 bestMove = move;
             }
@@ -373,7 +383,9 @@
             console.log("Triggering AI move");
             isAIThinking = true;
             updateStatus();
-            setTimeout(getAIMove, 100);
+            setTimeout(getAIMove, 100); // Small delay for UI responsiveness
+        } else {
+            console.log("AI move not triggered:", { gameOver: game.game_over(), turn: game.turn(), playerSide, isAIThinking });
         }
     }
 
@@ -392,7 +404,7 @@
 
     // Update player rating
     function updateRating(outcome) {
-        const aiRating = eloRatings[aiDifficulty]; // Use current difficulty’s Elo
+        const aiRating = eloRatings[aiDifficulty];
         const expectedScore = 1 / (1 + Math.pow(10, (aiRating - playerRating) / 400));
         playerRating += 32 * (outcome - expectedScore);
         playerRating = Math.round(playerRating);
