@@ -183,7 +183,6 @@
     // Handle Stockfish messages
     function handleStockfishMessage(event) {
         const message = event.data;
-        console.log("Stockfish message:", message);
         if (message.startsWith("bestmove") && isAIThinking) {
             const moveStr = message.split(" ")[1];
             const moves = game.moves({ verbose: true });
@@ -315,7 +314,7 @@
         return score;
     }
 
-    // Fallback minimax with alpha-beta pruning
+    // Fallback minimax with alpha-beta pruning (reduced depth)
     function minimax(tempGame, depth, alpha, beta, maximizingPlayer, startTime, timeLimit) {
         if (depth === 0 || tempGame.game_over() || (Date.now() - startTime > timeLimit)) {
             return evaluateBoard(tempGame);
@@ -346,7 +345,7 @@
         }
     }
 
-    // Fallback move
+    // Fallback move (faster with depth 2)
     function makeFallbackMove() {
         const moves = game.moves({ verbose: true });
         if (moves.length === 0) {
@@ -354,11 +353,11 @@
             updateStatus();
             return;
         }
-        const timeLimit = aiDifficulty * 100;
+        const timeLimit = 50;
         const startTime = Date.now();
         let bestMove = null;
         let bestScore = game.turn() === 'w' ? -Infinity : Infinity;
-        const depth = aiDifficulty;
+        const depth = 2; // Reduced for speed
 
         for (const move of moves) {
             const tempGame = new Chess(game.fen());
@@ -382,7 +381,7 @@
         }
     }
 
-    // Get AI move with Stockfish
+    // Get AI move with Stockfish (faster)
     function getAIMove() {
         const moves = game.moves({ verbose: true });
         if (moves.length === 0) {
@@ -393,30 +392,26 @@
 
         if (stockfishInitialized) {
             const skillLevel = Math.floor((aiDifficulty - 1) * 20 / 14);
-            const movetime = 100 * aiDifficulty;
-            console.log(`Requesting Stockfish move: Skill Level ${skillLevel}, Movetime ${movetime}ms`);
+            const movetime = 50; // Fixed low time for speed
             stockfish.postMessage(`setoption name Skill Level value ${skillLevel}`);
             stockfish.postMessage(`position fen ${game.fen()}`);
             stockfish.postMessage(`go movetime ${movetime}`);
             setTimeout(() => {
                 if (isAIThinking) {
-                    console.log("Stockfish timeout, using fallback");
-                    showError('Stockfish did not respond, using fallback AI');
+                    showError('Stockfish did not respond, using fallback');
                     makeFallbackMove();
                 }
-            }, movetime + 1000);
+            }, 100); // Tight timeout
         } else {
-            console.log("Stockfish not initialized, using fallback");
             makeFallbackMove();
         }
     }
 
-    // Trigger AI move
+    // Trigger AI move (no delay)
     function triggerAIMove() {
         if (!game.game_over() && game.turn() !== playerSide && !isAIThinking) {
             isAIThinking = true;
-            updateStatus();
-            setTimeout(getAIMove, 300);
+            getAIMove(); // Immediate execution
         }
     }
 
@@ -435,7 +430,7 @@
 
     // Update player rating
     function updateRating(outcome) {
-        const aiRating = 2700; // Note: Level 15 is stronger, but kept for simplicity
+        const aiRating = 2700;
         const expectedScore = 1 / (1 + Math.pow(10, (aiRating - playerRating) / 400));
         playerRating += 32 * (outcome - expectedScore);
         playerRating = Math.round(playerRating);
@@ -472,16 +467,14 @@
         updateBoard();
     }
 
-    // Update status
+    // Update status (no "AI is thinking")
     function updateStatus() {
         const statusDiv = document.getElementById('status');
         if (!game) {
             statusDiv.textContent = 'Game not initialized.';
             return;
         }
-        if (isAIThinking) {
-            statusDiv.textContent = 'AI is thinking...';
-        } else if (game.game_over()) {
+        if (game.game_over()) {
             statusDiv.textContent = 'Game over';
         } else {
             statusDiv.textContent = `${game.turn() === 'w' ? 'White' : 'Black'} to move${game.in_check() ? ' (in check)' : ''}`;
