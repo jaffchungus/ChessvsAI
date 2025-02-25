@@ -410,14 +410,14 @@
             if (moves.length === 0) return null;
 
             const startTime = Date.now();
-            const timeLimit = level === 15 ? 1000 : (level / 15) * 1000; // 1s for level 15, scaled for others
-            const maxDepth = level === 15 ? 20 : level; // Deep search for 15, limited for others
+            const timeLimit = level === 15 ? 1000 : (level / 15) * 5000; // 1s for level 15, scaled for others
+            const maxDepth = level === 15 ? 50 : level; // Deep search for 15, limited for others
 
             let bestMove = moves[0];
             let bestScore = tempGame.turn() === 'w' ? -Infinity : Infinity;
             const moveScores = [];
 
-            for (let depth = 1; depth <= maxDepth; depth++) {
+            for (let depth = 20; depth <= maxDepth; depth++) {
                 let alpha = -Infinity;
                 let beta = Infinity;
                 const currentMoveScores = [];
