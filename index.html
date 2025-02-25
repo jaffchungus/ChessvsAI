@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Chess vs AI (Super Enhanced v4)</title>
+    <title>Chess vs AI (Super Enhanced v6)</title>
     <style>
         body {
             background-color: #1e2a44;
@@ -141,7 +141,8 @@
 
         const pieceValues = { 'p': 100, 'n': 320, 'b': 330, 'r': 500, 'q': 900, 'k': 20000 };
 
-        const pawnPST = [
+        // Opening PSTs
+        const pawnPSTOpening = [
             0,  0,  0,  0,  0,  0,  0,  0,
             50, 50, 50, 50, 50, 50, 50, 50,
             10, 10, 20, 30, 30, 20, 10, 10,
@@ -152,7 +153,7 @@
             0,  0,  0,  0,  0,  0,  0,  0
         ];
 
-        const knightPST = [
+        const knightPSTOpening = [
             -50,-40,-30,-30,-30,-30,-40,-50,
             -40,-20,  0,  0,  0,  0,-20,-40,
             -30,  0, 10, 15, 15, 10,  0,-30,
@@ -163,18 +164,18 @@
             -50,-40,-30,-30,-30,-30,-40,-50
         ];
 
-        const bishopPST = [
+        const bishopPSTOpening = [
             -20,-10,-10,-10,-10,-10,-10,-20,
             -10,  0,  0,  0,  0,  0,  0,-10,
-            -10,  0,  5, 10, 10,  5,  0,-10,
             -10,  5,  5, 10, 10,  5,  5,-10,
+            -10,  0, 10, 10, 10, 10,  0,-10,
             -10,  0, 10, 10, 10, 10,  0,-10,
             -10, 10, 10, 10, 10, 10, 10,-10,
             -10,  5,  0,  0,  0,  0,  5,-10,
             -20,-10,-10,-10,-10,-10,-10,-20
         ];
 
-        const rookPST = [
+        const rookPSTOpening = [
             0,  0,  0,  0,  0,  0,  0,  0,
             5, 10, 10, 10, 10, 10, 10,  5,
            -5,  0,  0,  0,  0,  0,  0, -5,
@@ -185,7 +186,7 @@
             0,  0,  0,  5,  5,  0,  0,  0
         ];
 
-        const queenPST = [
+        const queenPSTOpening = [
             -20,-10,-10, -5, -5,-10,-10,-20,
             -10,  0,  0,  0,  0,  0,  0,-10,
             -10,  0,  5,  5,  5,  5,  0,-10,
@@ -205,6 +206,62 @@
             -10,-20,-20,-20,-20,-20,-20,-10,
              10, 10,-10,-10,-10,-10, 10, 10,
              20, 30, 10,  0,  0, 10, 30, 20
+        ];
+
+        // Endgame PSTs
+        const pawnPSTEndgame = [
+            0,  0,  0,  0,  0,  0,  0,  0,
+            80, 80, 80, 80, 80, 80, 80, 80,
+            50, 50, 50, 50, 50, 50, 50, 50,
+            30, 30, 30, 30, 30, 30, 30, 30,
+            20, 20, 20, 20, 20, 20, 20, 20,
+            10, 10, 10, 10, 10, 10, 10, 10,
+             0,  0,  0,  0,  0,  0,  0,  0,
+             0,  0,  0,  0,  0,  0,  0,  0
+        ];
+
+        const knightPSTEndgame = [
+            -50,-40,-30,-30,-30,-30,-40,-50,
+            -40,-20,  0,  0,  0,  0,-20,-40,
+            -30,  5, 10, 15, 15, 10,  5,-30,
+            -30, 10, 15, 20, 20, 15, 10,-30,
+            -30, 10, 15, 20, 20, 15, 10,-30,
+            -30,  5, 10, 15, 15, 10,  5,-30,
+            -40,-20,  0,  0,  0,  0,-20,-40,
+            -50,-40,-30,-30,-30,-30,-40,-50
+        ];
+
+        const bishopPSTEndgame = [
+            -20,-10,-10,-10,-10,-10,-10,-20,
+            -10,  5,  5,  5,  5,  5,  5,-10,
+            -10, 10, 10, 10, 10, 10, 10,-10,
+            -10, 10, 15, 15, 15, 15, 10,-10,
+            -10, 10, 15, 15, 15, 15, 10,-10,
+            -10, 10, 10, 10, 10, 10, 10,-10,
+            -10,  5,  5,  5,  5,  5,  5,-10,
+            -20,-10,-10,-10,-10,-10,-10,-20
+        ];
+
+        const rookPSTEndgame = [
+            0,  0,  0,  0,  0,  0,  0,  0,
+            5, 10, 10, 10, 10, 10, 10,  5,
+            5, 10, 10, 10, 10, 10, 10,  5,
+            5, 10, 10, 10, 10, 10, 10,  5,
+            5, 10, 10, 10, 10, 10, 10,  5,
+            5, 10, 10, 10, 10, 10, 10,  5,
+            5, 10, 10, 10, 10, 10, 10,  5,
+            0,  0,  0,  0,  0,  0,  0,  0
+        ];
+
+        const queenPSTEndgame = [
+            -20,-10,-10, -5, -5,-10,-10,-20,
+            -10,  5,  5,  5,  5,  5,  5,-10,
+            -10, 10, 10, 10, 10, 10, 10,-10,
+             -5, 10, 15, 15, 15, 15, 10, -5,
+              0, 10, 15, 15, 15, 15, 10, -5,
+            -10, 10, 10, 10, 10, 10, 10,-10,
+            -10,  5,  5,  5,  5,  5,  5,-10,
+            -20,-10,-10, -5, -5,-10,-10,-20
         ];
 
         const kingPSTEndgame = [
@@ -319,12 +376,13 @@
         }
 
         function evaluateBoard(tempGame) {
-            if (tempGame.in_checkmate()) return tempGame.turn() === 'w' ? -Infinity : Infinity;
+            if (tempGame.in_checkmate()) return tempGame.turn() === 'w' ? -200000 : 200000;
             if (tempGame.in_draw() || tempGame.in_threefold_repetition()) return 0;
 
             const board = tempGame.board();
             let score = 0;
             let material = { w: 0, b: 0 };
+            const isEndgame = (tempGame.history().length > 20 || (material.w + material.b < 2000));
 
             // Material and PSTs
             for (let row = 0; row < 8; row++) {
@@ -332,15 +390,24 @@
                     const piece = board[row][col];
                     if (piece) {
                         const value = pieceValues[piece.type];
-                        const idx = piece.color === 'w' ? row * 8 + col : (7 - row) * 8 + (7 - col);
-                        const pst = piece.type === 'p' ? pawnPST :
-                                    piece.type === 'n' ? knightPST :
-                                    piece.type === 'b' ? bishopPST :
-                                    piece.type === 'r' ? rookPST :
-                                    piece.type === 'q' ? queenPST :
-                                    (material.w + material.b < 2000 ? kingPSTEndgame : kingPSTOpening);
-                        score += piece.color === 'w' ? value + pst[idx] : -(value + pst[idx]);
                         material[piece.color] += value;
+                        const idx = piece.color === 'w' ? row * 8 + col : (7 - row) * 8 + (7 - col);
+                        const pst = isEndgame ? (
+                            piece.type === 'p' ? pawnPSTEndgame :
+                            piece.type === 'n' ? knightPSTEndgame :
+                            piece.type === 'b' ? bishopPSTEndgame :
+                            piece.type === 'r' ? rookPSTEndgame :
+                            piece.type === 'q' ? queenPSTEndgame :
+                            kingPSTEndgame
+                        ) : (
+                            piece.type === 'p' ? pawnPSTOpening :
+                            piece.type === 'n' ? knightPSTOpening :
+                            piece.type === 'b' ? bishopPSTOpening :
+                            piece.type === 'r' ? rookPSTOpening :
+                            piece.type === 'q' ? queenPSTOpening :
+                            kingPSTOpening
+                        );
+                        score += piece.color === 'w' ? value + pst[idx] : -(value + pst[idx]);
                     }
                 }
             }
@@ -349,7 +416,7 @@
             const moves = tempGame.moves({ verbose: true });
             let whiteMobility = 0, blackMobility = 0;
             moves.forEach(move => move.color === 'w' ? whiteMobility++ : blackMobility++);
-            score += (whiteMobility - blackMobility) * 10;
+            score += (whiteMobility - blackMobility) * (isEndgame ? 15 : 10);
 
             // Center control
             const center = ['d4', 'd5', 'e4', 'e5'];
@@ -362,8 +429,8 @@
                 }
             });
 
-            // Development (early game)
-            if (tempGame.history().length < 12) {
+            // Development (opening only)
+            if (!isEndgame) {
                 const undeveloped = {
                     w: ['b1', 'c1', 'f1', 'g1'].reduce((acc, sq) => acc + (tempGame.get(sq) ? 1 : 0), 0),
                     b: ['b8', 'c8', 'f8', 'g8'].reduce((acc, sq) => acc + (tempGame.get(sq) ? 1 : 0), 0)
@@ -372,26 +439,28 @@
                 score += undeveloped.b * 30;
             }
 
-            // King safety
-            const whiteKing = board.flat().find(p => p && p.type === 'k' && p.color === 'w');
-            const blackKing = board.flat().find(p => p && p.type === 'k' && p.color === 'b');
-            if (whiteKing) {
-                const wkIdx = board.flat().indexOf(whiteKing);
-                const wkRow = Math.floor(wkIdx / 8), wkCol = wkIdx % 8;
-                if (wkRow > 0) {
-                    for (let col = Math.max(0, wkCol - 1); col <= Math.min(7, wkCol + 1); col++) {
-                        const pawn = board[wkRow - 1][col];
-                        if (!pawn || pawn.type !== 'p' || pawn.color !== 'w') score -= 20;
+            // King safety (opening/middlegame)
+            if (!isEndgame) {
+                const whiteKing = board.flat().find(p => p && p.type === 'k' && p.color === 'w');
+                const blackKing = board.flat().find(p => p && p.type === 'k' && p.color === 'b');
+                if (whiteKing) {
+                    const wkIdx = board.flat().indexOf(whiteKing);
+                    const wkRow = Math.floor(wkIdx / 8), wkCol = wkIdx % 8;
+                    if (wkRow > 0) {
+                        for (let col = Math.max(0, wkCol - 1); col <= Math.min(7, wkCol + 1); col++) {
+                            const pawn = board[wkRow - 1][col];
+                            if (!pawn || pawn.type !== 'p' || pawn.color !== 'w') score -= 20;
+                        }
                     }
                 }
-            }
-            if (blackKing) {
-                const bkIdx = board.flat().indexOf(blackKing);
-                const bkRow = Math.floor(bkIdx / 8), bkCol = bkIdx % 8;
-                if (bkRow < 7) {
-                    for (let col = Math.max(0, bkCol - 1); col <= Math.min(7, bkCol + 1); col++) {
-                        const pawn = board[bkRow + 1][col];
-                        if (!pawn || pawn.type !== 'p' || pawn.color !== 'b') score += 20;
+                if (blackKing) {
+                    const bkIdx = board.flat().indexOf(blackKing);
+                    const bkRow = Math.floor(bkIdx / 8), bkCol = bkIdx % 8;
+                    if (bkRow < 7) {
+                        for (let col = Math.max(0, bkCol - 1); col <= Math.min(7, bkCol + 1); col++) {
+                            const pawn = board[bkRow + 1][col];
+                            if (!pawn || pawn.type !== 'p' || pawn.color !== 'b') score += 20;
+                        }
                     }
                 }
             }
@@ -407,9 +476,9 @@
                 }
             }
             for (let col = 0; col < 8; col++) {
-                if (pawnFiles[col].w > 1) score -= (pawnFiles[col].w - 1) * 20; // Doubled pawns
+                if (pawnFiles[col].w > 1) score -= (pawnFiles[col].w - 1) * 20;
                 if (pawnFiles[col].b > 1) score += (pawnFiles[col].b - 1) * 20;
-                if (pawnFiles[col].w > 0 && (!col || !pawnFiles[col - 1].w) && (col === 7 || !pawnFiles[col + 1].w)) score -= 30; // Isolated pawns
+                if (pawnFiles[col].w > 0 && (!col || !pawnFiles[col - 1].w) && (col === 7 || !pawnFiles[col + 1].w)) score -= 30;
                 if (pawnFiles[col].b > 0 && (!col || !pawnFiles[col - 1].b) && (col === 7 || !pawnFiles[col + 1].b)) score += 30;
             }
 
@@ -447,15 +516,13 @@
                 if (killerMoves[depth]?.includes(b.san)) bScore += 1000;
                 aScore += historyTable[a.san] || 0;
                 bScore += historyTable[b.san] || 0;
-                // Prioritize checks and advancing moves
-                const aCheck = new Chess(tempGame.fen()).move(a).in_check() ? 500 : 0;
-                const bCheck = new Chess(tempGame.fen()).move(b).in_check() ? 500 : 0;
-                aScore += aCheck;
-                bScore += bCheck;
-                const aDist = Math.abs(parseInt(a.to[1]) - parseInt(a.from[1]));
-                const bDist = Math.abs(parseInt(b.to[1]) - parseInt(b.from[1]));
-                aScore += aDist * 10;
-                bScore += bDist * 10;
+                // Prioritize checks
+                const tempGame = new Chess(game.fen());
+                tempGame.move(a);
+                if (tempGame.in_check()) aScore += 500;
+                tempGame.load(game.fen());
+                tempGame.move(b);
+                if (tempGame.in_check()) bScore += 500;
                 return bScore - aScore;
             });
         }
@@ -509,6 +576,7 @@
             let bestScore = -Infinity;
             let bestMove = null;
             const moves = orderMoves(tempGame.moves({ verbose: true }), depth);
+            if (moves.length === 0) return tempGame.in_check() ? -200000 + depth : 0;
 
             for (let i = 0; i < moves.length; i++) {
                 const move = moves[i];
@@ -524,6 +592,8 @@
                         score = -negamax(newGame, depth - 1, -beta, -alpha, -color, startTime, timeLimit, true);
                     }
                 }
+
+                if (Date.now() - startTime > timeLimit) break;
 
                 if (score >= beta) {
                     if (!move.captured && !move.promotion) {
@@ -545,15 +615,20 @@
 
         function getBestMove(tempGame, level) {
             const moves = orderMoves(tempGame.moves({ verbose: true }), 0);
-            if (moves.length === 0) return null;
+            if (moves.length === 0) {
+                console.log("No legal moves available");
+                return null;
+            }
 
             const startTime = Date.now();
-            const timeLimit = level === 15 ? 2000 : (level / 15) * 1000; // 2s for level 15
-            const maxDepth = level === 15 ? 20 : Math.min(level, 10);
+            const timeLimit = level === 15 ? 1000 : (level / 15) * 500; // 1s for level 15, scaled down for others
+            const maxDepth = level === 15 ? 10 : Math.min(level, 6); // Reduced depth for speed
 
             let bestMove = moves[0];
             let bestScore = -Infinity;
             const color = tempGame.turn() === 'w' ? 1 : -1;
+
+            console.log(`Starting search for depth ${maxDepth}, time limit ${timeLimit}ms`);
 
             for (let depth = 1; depth <= maxDepth; depth++) {
                 let alpha = -Infinity;
@@ -564,17 +639,19 @@
                     const newGame = new Chess(tempGame.fen());
                     newGame.move(move);
                     const score = -negamax(newGame, depth - 1, -beta, -alpha, -color, startTime, timeLimit, true);
+                    if (Date.now() - startTime > timeLimit) break;
                     if (score > bestScore) {
                         bestScore = score;
                         currentBestMove = move;
                         alpha = score;
                     }
-                    if (Date.now() - startTime > timeLimit) break;
                 }
 
                 if (Date.now() - startTime <= timeLimit) {
                     bestMove = currentBestMove;
+                    console.log(`Depth ${depth} completed, best move: ${bestMove.san}, score: ${bestScore}`);
                 } else {
+                    console.log(`Time limit exceeded at depth ${depth}`);
                     break;
                 }
             }
@@ -585,26 +662,35 @@
                 const twoMovesAgo = moveStack[moveStack.length - 3].move;
                 if (bestMove.san === twoMovesAgo && moves.length > 1) {
                     const alternatives = moves.filter(m => m.san !== bestMove.san);
-                    bestMove = alternatives[0]; // Pick the next best move
+                    bestMove = alternatives[0];
+                    console.log(`Avoided repetition, selected alternative: ${bestMove.san}`);
                 }
             }
 
             if (level < 15) {
                 const topMoves = moves.slice(0, Math.max(1, 16 - level));
-                return topMoves[Math.floor(Math.random() * topMoves.length)];
+                bestMove = topMoves[Math.floor(Math.random() * topMoves.length)];
+                console.log(`Lower level random move: ${bestMove.san}`);
             }
+
+            console.log(`Final move selected: ${bestMove.san}`);
             return bestMove;
         }
 
         function triggerAIMove() {
             if (!game.game_over() && game.turn() !== playerSide && !isAIThinking) {
                 isAIThinking = true;
+                console.log("AI thinking started");
                 setTimeout(() => {
                     const bestMove = getBestMove(game, aiDifficulty);
                     if (bestMove) {
                         game.move(bestMove);
                         moveStack.push({ fen: game.fen(), move: bestMove.san });
                         updateBoard();
+                        console.log(`AI moved: ${bestMove.san}`);
+                    } else {
+                        console.log("No move returned by getBestMove");
+                        showError("AI failed to find a move!");
                     }
                     isAIThinking = false;
                     checkGameOver();
