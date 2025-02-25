@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Chess vs AI</title>
+    <title>Chess vs AI (Super Enhanced v4)</title>
     <style>
         body {
             background-color: #1e2a44;
@@ -163,6 +163,61 @@
             -50,-40,-30,-30,-30,-30,-40,-50
         ];
 
+        const bishopPST = [
+            -20,-10,-10,-10,-10,-10,-10,-20,
+            -10,  0,  0,  0,  0,  0,  0,-10,
+            -10,  0,  5, 10, 10,  5,  0,-10,
+            -10,  5,  5, 10, 10,  5,  5,-10,
+            -10,  0, 10, 10, 10, 10,  0,-10,
+            -10, 10, 10, 10, 10, 10, 10,-10,
+            -10,  5,  0,  0,  0,  0,  5,-10,
+            -20,-10,-10,-10,-10,-10,-10,-20
+        ];
+
+        const rookPST = [
+            0,  0,  0,  0,  0,  0,  0,  0,
+            5, 10, 10, 10, 10, 10, 10,  5,
+           -5,  0,  0,  0,  0,  0,  0, -5,
+           -5,  0,  0,  0,  0,  0,  0, -5,
+           -5,  0,  0,  0,  0,  0,  0, -5,
+           -5,  0,  0,  0,  0,  0,  0, -5,
+           -5,  0,  0,  0,  0,  0,  0, -5,
+            0,  0,  0,  5,  5,  0,  0,  0
+        ];
+
+        const queenPST = [
+            -20,-10,-10, -5, -5,-10,-10,-20,
+            -10,  0,  0,  0,  0,  0,  0,-10,
+            -10,  0,  5,  5,  5,  5,  0,-10,
+             -5,  0,  5,  5,  5,  5,  0, -5,
+              0,  0,  5,  5,  5,  5,  0, -5,
+            -10,  5,  5,  5,  5,  5,  0,-10,
+            -10,  0,  5,  0,  0,  0,  0,-10,
+            -20,-10,-10, -5, -5,-10,-10,-20
+        ];
+
+        const kingPSTOpening = [
+            -30,-40,-40,-50,-50,-40,-40,-30,
+            -30,-40,-40,-50,-50,-40,-40,-30,
+            -30,-40,-40,-50,-50,-40,-40,-30,
+            -30,-40,-40,-50,-50,-40,-40,-30,
+            -20,-30,-30,-40,-40,-30,-30,-20,
+            -10,-20,-20,-20,-20,-20,-20,-10,
+             10, 10,-10,-10,-10,-10, 10, 10,
+             20, 30, 10,  0,  0, 10, 30, 20
+        ];
+
+        const kingPSTEndgame = [
+            -50,-40,-30,-20,-20,-30,-40,-50,
+            -30,-20,-10,  0,  0,-10,-20,-30,
+            -30,-10, 20, 30, 30, 20,-10,-30,
+            -30,-10, 30, 40, 40, 30,-10,-30,
+            -30,-10, 30, 40, 40, 30,-10,-30,
+            -30,-10, 20, 30, 30, 20,-10,-30,
+            -30,-30,  0,  0,  0,  0,-30,-30,
+            -50,-30,-30,-30,-30,-30,-30,-50
+        ];
+
         window.onload = function() {
             game = new Chess();
             moveStack = [];
@@ -269,45 +324,52 @@
 
             const board = tempGame.board();
             let score = 0;
+            let material = { w: 0, b: 0 };
 
-            // Material and piece-square tables
+            // Material and PSTs
             for (let row = 0; row < 8; row++) {
                 for (let col = 0; col < 8; col++) {
                     const piece = board[row][col];
                     if (piece) {
                         const value = pieceValues[piece.type];
                         const idx = piece.color === 'w' ? row * 8 + col : (7 - row) * 8 + (7 - col);
-                        const pst = piece.type === 'p' ? pawnPST : piece.type === 'n' ? knightPST : Array(64).fill(0);
+                        const pst = piece.type === 'p' ? pawnPST :
+                                    piece.type === 'n' ? knightPST :
+                                    piece.type === 'b' ? bishopPST :
+                                    piece.type === 'r' ? rookPST :
+                                    piece.type === 'q' ? queenPST :
+                                    (material.w + material.b < 2000 ? kingPSTEndgame : kingPSTOpening);
                         score += piece.color === 'w' ? value + pst[idx] : -(value + pst[idx]);
+                        material[piece.color] += value;
                     }
                 }
             }
 
-            // Mobility (encourage active play)
+            // Mobility
             const moves = tempGame.moves({ verbose: true });
             let whiteMobility = 0, blackMobility = 0;
             moves.forEach(move => move.color === 'w' ? whiteMobility++ : blackMobility++);
-            score += (whiteMobility - blackMobility) * 15;
+            score += (whiteMobility - blackMobility) * 10;
 
-            // Center control (d4, d5, e4, e5)
+            // Center control
             const center = ['d4', 'd5', 'e4', 'e5'];
             center.forEach(sq => {
                 const piece = tempGame.get(sq);
                 if (piece) {
                     if (piece.type === 'p') score += piece.color === 'w' ? 30 : -30;
                     if (piece.type === 'n' || piece.type === 'b') score += piece.color === 'w' ? 20 : -20;
-                    if (piece.type === 'r' || piece.type === 'q') score += piece.color === 'w' ? 10 : -10;
+                    if (piece.type === 'r' || piece.type === 'q') score += piece.color === 'w' ? 15 : -15;
                 }
             });
 
-            // Piece activity and development (early game)
+            // Development (early game)
             if (tempGame.history().length < 12) {
                 const undeveloped = {
-                    w: ['b1', 'c1', 'd1', 'e1', 'f1', 'g1'].reduce((acc, sq) => acc + (tempGame.get(sq) && tempGame.get(sq).type !== 'p' ? 1 : 0), 0),
-                    b: ['b8', 'c8', 'd8', 'e8', 'f8', 'g8'].reduce((acc, sq) => acc + (tempGame.get(sq) && tempGame.get(sq).type !== 'p' ? 1 : 0), 0)
+                    w: ['b1', 'c1', 'f1', 'g1'].reduce((acc, sq) => acc + (tempGame.get(sq) ? 1 : 0), 0),
+                    b: ['b8', 'c8', 'f8', 'g8'].reduce((acc, sq) => acc + (tempGame.get(sq) ? 1 : 0), 0)
                 };
-                score -= undeveloped.w * 25; // Penalize undeveloped pieces
-                score += undeveloped.b * 25;
+                score -= undeveloped.w * 30;
+                score += undeveloped.b * 30;
             }
 
             // King safety
@@ -351,27 +413,23 @@
                 if (pawnFiles[col].b > 0 && (!col || !pawnFiles[col - 1].b) && (col === 7 || !pawnFiles[col + 1].b)) score += 30;
             }
 
-            // Encourage attacking opponent's king
-            if (blackKing) {
-                const bkIdx = board.flat().indexOf(blackKing);
-                const bkRow = Math.floor(bkIdx / 8), bkCol = bkIdx % 8;
-                for (let row = Math.max(0, bkRow - 1); row <= Math.min(7, bkRow + 1); row++) {
-                    for (let col = Math.max(0, bkCol - 1); col <= Math.min(7, bkCol + 1); col++) {
+            // Rook on open files
+            for (let col = 0; col < 8; col++) {
+                if (!pawnFiles[col].w && !pawnFiles[col].b) {
+                    for (let row = 0; row < 8; row++) {
                         const piece = board[row][col];
-                        if (piece && piece.color === 'w' && piece.type !== 'k') score += 10;
+                        if (piece && piece.type === 'r') {
+                            score += piece.color === 'w' ? 25 : -25;
+                        }
                     }
                 }
             }
-            if (whiteKing) {
-                const wkIdx = board.flat().indexOf(whiteKing);
-                const wkRow = Math.floor(wkIdx / 8), wkCol = wkIdx % 8;
-                for (let row = Math.max(0, wkRow - 1); row <= Math.min(7, wkRow + 1); row++) {
-                    for (let col = Math.max(0, wkCol - 1); col <= Math.min(7, wkCol + 1); col++) {
-                        const piece = board[row][col];
-                        if (piece && piece.color === 'b' && piece.type !== 'k') score -= 10;
-                    }
-                }
-            }
+
+            // Bishop pair
+            const whiteBishops = board.flat().filter(p => p && p.type === 'b' && p.color === 'w').length;
+            const blackBishops = board.flat().filter(p => p && p.type === 'b' && p.color === 'b').length;
+            if (whiteBishops >= 2) score += 50;
+            if (blackBishops >= 2) score -= 50;
 
             return score;
         }
@@ -383,17 +441,21 @@
                 if (b.captured) bScore += pieceValues[b.captured] - (pieceValues[b.piece] || 0);
                 if (a.promotion) aScore += 900;
                 if (b.promotion) bScore += 900;
-                if (a.flags.includes('k') || a.flags.includes('q')) aScore += 50; // Castling
-                if (b.flags.includes('k') || b.flags.includes('q')) bScore += 50;
+                if (a.flags.includes('k') || a.flags.includes('q')) aScore += 100; // Castling
+                if (b.flags.includes('k') || b.flags.includes('q')) bScore += 100;
                 if (killerMoves[depth]?.includes(a.san)) aScore += 1000;
                 if (killerMoves[depth]?.includes(b.san)) bScore += 1000;
                 aScore += historyTable[a.san] || 0;
                 bScore += historyTable[b.san] || 0;
-                // Prioritize moves advancing pieces toward the center or opponent's king
-                const aDist = Math.abs(a.to.charCodeAt(0) - 'e'.charCodeAt(0)) + Math.abs(parseInt(a.to[1]) - 4.5);
-                const bDist = Math.abs(b.to.charCodeAt(0) - 'e'.charCodeAt(0)) + Math.abs(parseInt(b.to[1]) - 4.5);
-                aScore -= aDist; // Lower distance to center increases score
-                bScore -= bDist;
+                // Prioritize checks and advancing moves
+                const aCheck = new Chess(tempGame.fen()).move(a).in_check() ? 500 : 0;
+                const bCheck = new Chess(tempGame.fen()).move(b).in_check() ? 500 : 0;
+                aScore += aCheck;
+                bScore += bCheck;
+                const aDist = Math.abs(parseInt(a.to[1]) - parseInt(a.from[1]));
+                const bDist = Math.abs(parseInt(b.to[1]) - parseInt(b.from[1]));
+                aScore += aDist * 10;
+                bScore += bDist * 10;
                 return bScore - aScore;
             });
         }
@@ -432,7 +494,7 @@
             }
         }
 
-        function negamax(tempGame, depth, alpha, beta, color, startTime, timeLimit) {
+        function negamax(tempGame, depth, alpha, beta, color, startTime, timeLimit, isPV = false) {
             const fen = tempGame.fen();
             if (transpositionTable.has(fen) && transpositionTable.get(fen).depth >= depth) {
                 return transpositionTable.get(fen).score * color;
@@ -447,10 +509,22 @@
             let bestScore = -Infinity;
             let bestMove = null;
             const moves = orderMoves(tempGame.moves({ verbose: true }), depth);
-            for (const move of moves) {
+
+            for (let i = 0; i < moves.length; i++) {
+                const move = moves[i];
                 const newGame = new Chess(tempGame.fen());
                 newGame.move(move);
-                const score = -negamax(newGame, depth - 1, -beta, -alpha, -color, startTime, timeLimit);
+                let score;
+
+                if (i === 0 && isPV) {
+                    score = -negamax(newGame, depth - 1, -beta, -alpha, -color, startTime, timeLimit, true);
+                } else {
+                    score = -negamax(newGame, depth - 1, -alpha - 1, -alpha, -color, startTime, timeLimit, false);
+                    if (alpha < score && score < beta) {
+                        score = -negamax(newGame, depth - 1, -beta, -alpha, -color, startTime, timeLimit, true);
+                    }
+                }
+
                 if (score >= beta) {
                     if (!move.captured && !move.promotion) {
                         killerMoves[depth].push(move.san);
@@ -489,7 +563,7 @@
                 for (const move of moves) {
                     const newGame = new Chess(tempGame.fen());
                     newGame.move(move);
-                    const score = -negamax(newGame, depth - 1, -beta, -alpha, -color, startTime, timeLimit);
+                    const score = -negamax(newGame, depth - 1, -beta, -alpha, -color, startTime, timeLimit, true);
                     if (score > bestScore) {
                         bestScore = score;
                         currentBestMove = move;
@@ -511,7 +585,7 @@
                 const twoMovesAgo = moveStack[moveStack.length - 3].move;
                 if (bestMove.san === twoMovesAgo && moves.length > 1) {
                     const alternatives = moves.filter(m => m.san !== bestMove.san);
-                    bestMove = alternatives[Math.floor(Math.random() * alternatives.length)]; // Pick a random alternative
+                    bestMove = alternatives[0]; // Pick the next best move
                 }
             }
 
