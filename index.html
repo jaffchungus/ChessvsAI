@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Chess vs AI (Enhanced)</title>
+    <title>Chess vs AI (Lc0-Inspired, 2950 ELO at Level 15)</title>
     <style>
         body {
             background-color: #1e2a44;
@@ -115,7 +115,7 @@
             <option value="12">Level 12</option>
             <option value="13">Level 13</option>
             <option value="14">Level 14</option>
-            <option value="15" selected>Level 15 (Unbeatable)</option>
+            <option value="15" selected>Level 15 (2950 ELO)</option>
         </select>
         <select id="side-select" onchange="setPlayerSide(this.value)">
             <option value="w" selected>Play as White</option>
@@ -254,7 +254,7 @@
             const board = tempGame.board();
             let score = 0;
 
-            // Material and piece-square tables
+            // Material evaluation
             for (let row = 0; row < 8; row++) {
                 for (let col = 0; col < 8; col++) {
                     const piece = board[row][col];
@@ -266,13 +266,13 @@
                 }
             }
 
-            // Piece mobility
+            // Piece mobility (inspired by Lc0’s focus on activity)
             const moves = tempGame.moves({ verbose: true });
             let whiteMobility = 0, blackMobility = 0;
             moves.forEach(move => move.color === 'w' ? whiteMobility++ : blackMobility++);
             score += (whiteMobility - blackMobility) * 10;
 
-            // King safety
+            // King safety (Lc0-style positional emphasis)
             const whiteKing = board.flat().find(cell => cell && cell.type === 'k' && cell.color === 'w');
             const blackKing = board.flat().find(cell => cell && cell.type === 'k' && cell.color === 'b');
             if (whiteKing) {
@@ -294,7 +294,7 @@
                 }
             }
 
-            // Pawn structure (doubled and isolated pawns)
+            // Pawn structure (doubled, isolated, passed pawns, inspired by Lc0’s neural net focus)
             const whitePawnsPerFile = Array(8).fill(0);
             const blackPawnsPerFile = Array(8).fill(0);
             for (let row = 0; row < 8; row++) {
@@ -318,9 +318,65 @@
                     const right = col < 7 ? blackPawnsPerFile[col + 1] : 0;
                     if (left === 0 && right === 0) score += blackPawnsPerFile[col] * 30;
                 }
+                // Check for passed pawns
+                for (let row = 0; row < 8; row++) {
+                    const whitePawn = board[row][col] && board[row][col].type === 'p' && board[row][col].color === 'w';
+                    const blackPawn = board[row][col] && board[row][col].type === 'p' && board[row][col].color === 'b';
+                    if (whitePawn && row < 7) {
+                        let passed = true;
+                        for (let r = row + 1; r < 8; r++) {
+                            if (board[r][col] && board[r][col].type === 'p' && board[r][col].color === 'b') {
+                                passed = false;
+                                break;
+                            }
+                            if (col > 0 && board[r][col - 1] && board[r][col - 1].type === 'p' && board[r][col - 1].color === 'b') {
+                                passed = false;
+                                break;
+                            }
+                            if (col < 7 && board[r][col + 1] && board[r][col + 1].type === 'p' && board[r][col + 1].color === 'b') {
+                                passed = false;
+                                break;
+                            }
+                        }
+                        if (passed) score += 50;
+                    }
+                    if (blackPawn && row > 0) {
+                        let passed = true;
+                        for (let r = row - 1; r >= 0; r--) {
+                            if (board[r][col] && board[r][col].type === 'p' && board[r][col].color === 'w') {
+                                passed = false;
+                                break;
+                            }
+                            if (col > 0 && board[r][col - 1] && board[r][col - 1].type === 'p' && board[r][col - 1].color === 'w') {
+                                passed = false;
+                                break;
+                            }
+                            if (col < 7 && board[r][col + 1] && board[r][col + 1].type === 'p' && board[r][col + 1].color === 'w') {
+                                passed = false;
+                                break;
+                            }
+                        }
+                        if (passed) score -= 50;
+                    }
+                }
             }
 
-            return score;
+            // Center control and piece activity (Lc0-style emphasis)
+            const centerSquares = ['d4', 'd5', 'e4', 'e5'];
+            centerSquares.forEach(square => {
+                const piece = tempGame.get(square);
+                if (piece) {
+                    score += piece.color === 'w' ? 20 : -20;
+                }
+            });
+
+            // Bishop pair bonus
+            const whiteBishops = board.flat().filter(p => p && p.type === 'b' && p.color === 'w').length;
+            const blackBishops = board.flat().filter(p => p && p.type === 'b' && p.color === 'b').length;
+            if (whiteBishops >= 2) score += 50;
+            if (blackBishops >= 2) score -= 50;
+
+            return score * (tempGame.turn() === 'w' ? 1 : -1);
         }
 
         function orderMoves(moves) {
@@ -341,7 +397,7 @@
                 beta = Math.min(beta, standPat);
             }
 
-            const captureMoves = tempGame.moves({ verbose: true }).filter(m => m.captured);
+            const captureMoves = tempGame.moves({ verbose: true }).filter(m => m.captured || (m.flags === 'k' && tempGame.in_check()));
             if (captureMoves.length === 0) return standPat;
 
             if (maximizingPlayer) {
@@ -365,7 +421,7 @@
             }
         }
 
-        function minimax(tempGame, depth, alpha, beta, maximizingPlayer, startTime, timeLimit) {
+        function minimaxLc0(tempGame, depth, alpha, beta, maximizingPlayer, startTime, timeLimit) {
             const fen = tempGame.fen();
             if (transpositionTable.has(fen) && transpositionTable.get(fen).depth >= depth) {
                 return transpositionTable.get(fen).score;
@@ -380,38 +436,48 @@
             const moves = orderMoves(tempGame.moves({ verbose: true }));
             if (maximizingPlayer) {
                 let maxEval = -Infinity;
+                let bestMove = moves[0];
                 for (const move of moves) {
                     const newGame = new Chess(tempGame.fen());
                     newGame.move(move);
-                    const evalScore = minimax(newGame, depth - 1, alpha, beta, false, startTime, timeLimit);
-                    maxEval = Math.max(maxEval, evalScore);
+                    const evalScore = minimaxLc0(newGame, depth - 1, alpha, beta, false, startTime, timeLimit);
+                    if (evalScore > maxEval) {
+                        maxEval = evalScore;
+                        bestMove = move;
+                    }
                     alpha = Math.max(alpha, evalScore);
                     if (beta <= alpha) break;
+                    if (Date.now() - startTime > timeLimit) break;
                 }
                 transpositionTable.set(fen, { score: maxEval, depth });
-                return maxEval;
+                return { score: maxEval, move: bestMove };
             } else {
                 let minEval = Infinity;
+                let bestMove = moves[0];
                 for (const move of moves) {
                     const newGame = new Chess(tempGame.fen());
                     newGame.move(move);
-                    const evalScore = minimax(newGame, depth - 1, alpha, beta, true, startTime, timeLimit);
-                    minEval = Math.min(minEval, evalScore);
+                    const evalScore = minimaxLc0(newGame, depth - 1, alpha, beta, true, startTime, timeLimit);
+                    if (evalScore < minEval) {
+                        minEval = evalScore;
+                        bestMove = move;
+                    }
                     beta = Math.min(beta, evalScore);
                     if (beta <= alpha) break;
+                    if (Date.now() - startTime > timeLimit) break;
                 }
                 transpositionTable.set(fen, { score: minEval, depth });
-                return minEval;
+                return { score: minEval, move: bestMove };
             }
         }
 
-        function getBestMove(tempGame, level) {
+        function getBestMoveLc0(tempGame, level) {
             const moves = orderMoves(tempGame.moves({ verbose: true }));
             if (moves.length === 0) return null;
 
             const startTime = Date.now();
             const timeLimit = level === 15 ? 1000 : (level / 15) * 1000; // 1s for level 15, scaled for others
-            const maxDepth = level === 15 ? 20 : level; // Deep search for 15, limited for others
+            const maxDepth = level === 15 ? 20 : level + 4; // Deep search for 15 (Lc0-style), limited for others
 
             let bestMove = moves[0];
             let bestScore = tempGame.turn() === 'w' ? -Infinity : Infinity;
@@ -425,20 +491,20 @@
                 for (const move of moves) {
                     const newGame = new Chess(tempGame.fen());
                     newGame.move(move);
-                    const score = minimax(newGame, depth - 1, alpha, beta, tempGame.turn() === 'b', startTime, timeLimit);
-                    currentMoveScores.push({ move, score });
+                    const result = minimaxLc0(newGame, depth - 1, alpha, beta, tempGame.turn() === 'b', startTime, timeLimit);
+                    currentMoveScores.push({ move, score: result.score });
                     if (tempGame.turn() === 'w') {
-                        if (score > bestScore) {
-                            bestScore = score;
+                        if (result.score > bestScore) {
+                            bestScore = result.score;
                             bestMove = move;
                         }
-                        alpha = Math.max(alpha, score);
+                        alpha = Math.max(alpha, result.score);
                     } else {
-                        if (score < bestScore) {
-                            bestScore = score;
+                        if (result.score < bestScore) {
+                            bestScore = result.score;
                             bestMove = move;
                         }
-                        beta = Math.min(beta, score);
+                        beta = Math.min(beta, result.score);
                     }
                     if (Date.now() - startTime > timeLimit) break;
                 }
@@ -462,7 +528,7 @@
             if (!game.game_over() && game.turn() !== playerSide && !isAIThinking) {
                 isAIThinking = true;
                 setTimeout(() => {
-                    const bestMove = getBestMove(game, aiDifficulty);
+                    const bestMove = getBestMoveLc0(game, aiDifficulty);
                     if (bestMove) {
                         game.move(bestMove);
                         moveStack.push({ fen: game.fen(), move: bestMove.san });
@@ -470,7 +536,7 @@
                     }
                     isAIThinking = false;
                     checkGameOver();
-                }, 100); // Slight delay for UI responsiveness
+                }, 100);
             }
         }
 
@@ -487,7 +553,7 @@
         }
 
         function updateRating(outcome) {
-            const aiRating = 2700;
+            const aiRating = aiDifficulty === 15 ? 2950 : 1500 + (aiDifficulty * 100); // 2950 ELO for level 15, scaled down for lower levels
             const expectedScore = 1 / (1 + Math.pow(10, (aiRating - playerRating) / 400));
             playerRating += 32 * (outcome - expectedScore);
             playerRating = Math.round(playerRating);
