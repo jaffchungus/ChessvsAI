@@ -416,8 +416,8 @@
             if (moves.length === 0) return null;
 
             const startTime = Date.now();
-            const timeLimit = level === 15 ? 2000 : (level / 15) * 1000; // 2s for level 15
-            const maxDepth = level === 15 ? 20 : Math.min(level, 10); // Depth 20 for 3200-level play
+            const timeLimit = level === 15 ? 20000 : (level / 15) * 1000; // 2s for level 15
+            const maxDepth = level === 15 ? 300 : Math.min(level, 10); // Depth 300 for 3200-level play
 
             let bestMove = moves[0];
             let bestScore = -Infinity;
