@@ -621,8 +621,8 @@
             }
 
             const startTime = Date.now();
-            const timeLimit = level === 15 ? 1000 : (level / 15) * 500; // 1s for level 15, scaled down for others
-            const maxDepth = level === 15 ? 10 : Math.min(level, 6); // Reduced depth for speed
+            const timeLimit = 3000; // 3 seconds for level 15
+            const maxDepth = level === 15 ? 6 : Math.min(level, 6); // Reduced depth for speed
 
             let bestMove = moves[0];
             let bestScore = -Infinity;
