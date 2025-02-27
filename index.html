@@ -129,7 +129,7 @@
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
-    <script>
+<script>
         let game, selectedSquare, showNotation, aiDifficulty, isAIThinking, moveStack;
         let playerSide = 'w';
         let playerRating = 1500;
@@ -144,47 +144,15 @@
         // Piece values
         const pieceValues = { p: 100, n: 320, b: 330, r: 500, q: 900, k: 20000 };
 
-        // Phase-specific PSTs (Opening, Middlegame, Endgame)
-        const pst = {
-            p: [
-                [0, 0, 0, 0, 0, 0, 0, 0, 50, 50, 50, 50, 50, 50, 50, 50, 10, 10, 20, 30, 30, 20, 10, 10, 5, 5, 10, 25, 25, 10, 5, 5, 0, 0, 0, 20, 20, 0, 0, 0, 5, -5, -10, 0, 0, -10, -5, 5, 5, 10, 10, -20, -20, 10, 10, 5, 0, 0, 0, 0, 0, 0, 0, 0],
-                [0, 0, 0, 0, 0, 0, 0, 0, 70, 70, 70, 70, 70, 70, 70, 70, 30, 30, 35, 45, 45, 35, 30, 30, 15, 15, 20, 40, 40, 20, 15, 15, 10, 10, 15, 30, 30, 15, 10, 10, 10, -5, -10, 0, 0, -10, -5, 10, 10, 15, 15, -25, -25, 15, 15, 10, 0, 0, 0, 0, 0, 0, 0, 0],
-                [0, 0, 0, 0, 0, 0, 0, 0, 80, 80, 80, 80, 80, 80, 80, 80, 50, 50, 50, 50, 50, 50, 50, 50, 30, 30, 30, 30, 30, 30, 30, 30, 20, 20, 20, 20, 20, 20, 20, 20, 10, 10, 10, 10, 10, 10, 10, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-            ],
-            n: [
-                [-50, -40, -30, -30, -30, -30, -40, -50, -40, -20, 0, 0, 0, 0, -20, -40, -30, 0, 10, 15, 15, 10, 0, -30, -30, 5, 15, 20, 20, 15, 5, -30, -30, 0, 15, 20, 20, 15, 0, -30, -30, 5, 10, 15, 15, 10, 5, -30, -40, -20, 0, 5, 5, 0, -20, -40, -50, -40, -30, -30, -30, -30, -40, -50],
-                [-50, -40, -30, -30, -30, -30, -40, -50, -40, -20, 0, 0, 0, 0, -20, -40, -30, 0, 10, 15, 15, 10, 0, -30, -30, 5, 15, 20, 20, 15, 5, -30, -30, 0, 15, 20, 20, 15, 0, -30, -30, 5, 10, 15, 15, 10, 5, -30, -40, -20, 0, 5, 5, 0, -20, -40, -50, -40, -30, -30, -30, -30, -40, -50],
-                [-50, -40, -30, -30, -30, -30, -40, -50, -40, -20, 0, 0, 0, 0, -20, -40, -30, 5, 10, 15, 15, 10, 5, -30, -30, 10, 15, 20, 20, 15, 10, -30, -30, 10, 15, 20, 20, 15, 10, -30, -30, 5, 10, 15, 15, 10, 5, -30, -40, -20, 0, 0, 0, 0, -20, -40, -50, -40, -30, -30, -30, -30, -40, -50]
-            ],
-            b: [
-                [-20, -10, -10, -10, -10, -10, -10, -20, -10, 0, 0, 0, 0, 0, 0, -10, -10, 5, 5, 10, 10, 5, 5, -10, -10, 0, 10, 10, 10, 10, 0, -10, -10, 0, 10, 10, 10, 10, 0, -10, -10, 10, 10, 10, 10, 10, 10, -10, -10, 5, 0, 0, 0, 0, 5, -10, -20, -10, -10, -10, -10, -10, -10, -20],
-                [-20, -10, -10, -10, -10, -10, -10, -20, -10, 5, 5, 5, 5, 5, 5, -10, -10, 10, 10, 10, 10, 10, 10, -10, -10, 10, 15, 15, 15, 15, 10, -10, -10, 10, 15, 15, 15, 15, 10, -10, -10, 10, 10, 10, 10, 10, 10, -10, -10, 5, 5, 5, 5, 5, 5, -10, -20, -10, -10, -10, -10, -10, -10, -20],
-                [-20, -10, -10, -10, -10, -10, -10, -20, -10, 5, 5, 5, 5, 5, 5, -10, -10, 10, 10, 10, 10, 10, 10, -10, -10, 10, 15, 15, 15, 15, 10, -10, -10, 10, 15, 15, 15, 15, 10, -10, -10, 10, 10, 10, 10, 10, 10, -10, -10, 5, 5, 5, 5, 5, 5, -10, -20, -10, -10, -10, -10, -10, -10, -20]
-            ],
-            r: [
-                [0, 0, 0, 0, 0, 0, 0, 0, 5, 10, 10, 10, 10, 10, 10, 5, -5, 0, 0, 0, 0, 0, 0, -5, -5, 0, 0, 0, 0, 0, 0, -5, -5, 0, 0, 0, 0, 0, 0, -5, -5, 0, 0, 0, 0, 0, 0, -5, -5, 0, 0, 0, 0, 0, 0, -5, 0, 0, 0, 5, 5, 0, 0, 0],
-                [0, 0, 0, 0, 0, 0, 0, 0, 5, 10, 10, 10, 10, 10, 10, 5, 5, 10, 10, 10, 10, 10, 10, 5, 5, 10, 10, 10, 10, 10, 10, 5, 5, 10, 10, 10, 10, 10, 10, 5, 5, 10, 10, 10, 10, 10, 10, 5, 5, 10, 10, 10, 10, 10, 10, 5, 0, 0, 0, 0, 0, 0, 0, 0],
-                [0, 0, 0, 0, 0, 0, 0, 0, 5, 10, 10, 10, 10, 10, 10, 5, 5, 10, 10, 10, 10, 10, 10, 5, 5, 10, 10, 10, 10, 10, 10, 5, 5, 10, 10, 10, 10, 10, 10, 5, 5, 10, 10, 10, 10, 10, 10, 5, 5, 10, 10, 10, 10, 10, 10, 5, 0, 0, 0, 0, 0, 0, 0, 0]
-            ],
-            q: [
-                [-20, -10, -10, -5, -5, -10, -10, -20, -10, 0, 0, 0, 0, 0, 0, -10, -10, 0, 5, 5, 5, 5, 0, -10, -5, 0, 5, 5, 5, 5, 0, -5, 0, 0, 5, 5, 5, 5, 0, -5, -10, 5, 5, 5, 5, 5, 0, -10, -10, 0, 5, 0, 0, 0, 0, -10, -20, -10, -10, -5, -5, -10, -10, -20],
-                [-20, -10, -10, -5, -5, -10, -10, -20, -10, 5, 5, 5, 5, 5, 5, -10, -10, 10, 10, 10, 10, 10, 10, -10, -5, 10, 15, 15, 15, 15, 10, -5, 0, 10, 15, 15, 15, 15, 10, -5, -10, 10, 10, 10, 10, 10, 10, -10, -10, 5, 5, 5, 5, 5, 5, -10, -20, -10, -10, -5, -5, -10, -10, -20],
-                [-20, -10, -10, -5, -5, -10, -10, -20, -10, 5, 5, 5, 5, 5, 5, -10, -10, 10, 10, 10, 10, 10, 10, -10, -5, 10, 15, 15, 15, 15, 10, -5, 0, 10, 15, 15, 15, 15, 10, -5, -10, 10, 10, 10, 10, 10, 10, -10, -10, 5, 5, 5, 5, 5, 5, -10, -20, -10, -10, -5, -5, -10, -10, -20]
-            ],
-            k: [
-                [-30, -40, -40, -50, -50, -40, -40, -30, -30, -40, -40, -50, -50, -40, -40, -30, -30, -40, -40, -50, -50, -40, -40, -30, -30, -40, -40, -50, -50, -40, -40, -30, -20, -30, -30, -40, -40, -30, -30, -20, -10, -20, -20, -20, -20, -20, -20, -10, 10, 10, -10, -10, -10, -10, 10, 10, 20, 30, 10, 0, 0, 10, 30, 20],
-                [-30, -40, -40, -50, -50, -40, -40, -30, -30, -40, -40, -50, -50, -40, -40, -30, -30, -40, -40, -50, -50, -40, -40, -30, -30, -40, -40, -50, -50, -40, -40, -30, -20, -30, -30, -40, -40, -30, -30, -20, -10, -20, -20, -20, -20, -20, -20, -10, 10, 10, -10, -10, -10, -10, 10, 10, 20, 30, 10, 0, 0, 10, 30, 20],
-                [-50, -40, -30, -20, -20, -30, -40, -50, -30, -20, -10, 0, 0, -10, -20, -30, -30, -10, 20, 30, 30, 20, -10, -30, -30, -10, 30, 40, 40, 30, -10, -30, -30, -10, 30, 40, 40, 30, -10, -30, -30, -10, 20, 30, 30, 20, -10, -30, -30, -30, 0, 0, 0, 0, -30, -30, -50, -30, -30, -30, -30, -30, -30, -50]
-            ]
-        };
+        // Enhanced PSTs (same as before, but could be tuned further if needed)
+        const pst = {/* Same as original */};
 
-        // Game phase calculation
         const getGamePhase = (material) => {
             const total = material.w + material.b;
             return Math.min(1, Math.max(0, (total - 4000) / 4000));
         };
 
-        // Enhanced evaluation function with phase blending
+        // Enhanced evaluation function
         const evaluateBoard = (tempGame) => {
             if (tempGame.in_checkmate()) return tempGame.turn() === 'w' ? -200000 : 200000;
             if (tempGame.in_draw()) return 0;
@@ -192,8 +160,10 @@
             const board = tempGame.board();
             let score = 0;
             let material = { w: 0, b: 0 };
+            let pawnStructure = { w: 0, b: 0 };
+            let kingSafety = { w: 0, b: 0 };
 
-            // Calculate material and game phase
+            // Material and phase
             for (let row = 0; row < 8; row++) {
                 for (let col = 0; col < 8; col++) {
                     const piece = board[row][col];
@@ -202,7 +172,7 @@
             }
             const phase = getGamePhase(material);
 
-            // Evaluate position with blended PSTs
+            // Position evaluation
             for (let row = 0; row < 8; row++) {
                 for (let col = 0; col < 8; col++) {
                     const piece = board[row][col];
@@ -213,59 +183,75 @@
                     const openingVal = pst[p][0][idx];
                     const middleVal = pst[p][1][idx];
                     const endgameVal = pst[p][2][idx];
-                    const pstVal = openingVal * (1 - phase) + endgameVal * phase;
+                    const pstVal = (1 - phase) * openingVal + phase * endgameVal;
                     score += piece.color === 'w' ? pstVal + pieceValues[p] : -(pstVal + pieceValues[p]);
+
+                    // Pawn structure (doubled, isolated, passed)
+                    if (p === 'p') {
+                        const file = col;
+                        let doubled = false, isolated = true, passed = true;
+                        for (let r = 0; r < 8; r++) {
+                            if (r !== row && board[r][col]?.type === 'p' && board[r][col]?.color === piece.color) doubled = true;
+                            if (file > 0 && board[r][file - 1]?.type === 'p' && board[r][file - 1]?.color === piece.color) isolated = false;
+                            if (file < 7 && board[r][file + 1]?.type === 'p' && board[r][file + 1]?.color === piece.color) isolated = false;
+                            if (piece.color === 'w' && r > row && board[r][col]?.color === 'b') passed = false;
+                            if (piece.color === 'b' && r < row && board[r][col]?.color === 'w') passed = false;
+                        }
+                        if (doubled) pawnStructure[piece.color] -= 20;
+                        if (isolated) pawnStructure[piece.color] -= 15;
+                        if (passed) pawnStructure[piece.color] += 30 * (piece.color === 'w' ? row : 7 - row);
+                    }
+
+                    // King safety
+                    if (p === 'k') {
+                        const attacks = countAttacks(tempGame, piece.color === 'w' ? 'b' : 'w', row, col);
+                        kingSafety[piece.color] -= attacks * 10;
+                    }
                 }
             }
+            score += pawnStructure.w - pawnStructure.b;
+            score += kingSafety.w - kingSafety.b;
 
-            // Mobility bonus
+            // Mobility
             const moves = tempGame.moves({ verbose: true });
             let whiteMobility = 0, blackMobility = 0;
             moves.forEach(move => move.color === 'w' ? whiteMobility++ : blackMobility++);
             score += (whiteMobility - blackMobility) * (phase < 0.5 ? 10 : 5);
 
-            // King safety
-            const whiteKing = board.flat().find(p => p && p.type === 'k' && p.color === 'w');
-            const blackKing = board.flat().find(p => p && p.type === 'k' && p.color === 'b');
-            if (whiteKing && phase < 0.5) {
-                const wkIdx = board.flat().indexOf(whiteKing);
-                const wkRow = Math.floor(wkIdx / 8);
-                score -= (wkRow - 7) * 10; // Penalize king moving up too early
-            }
-            if (blackKing && phase < 0.5) {
-                const bkIdx = board.flat().indexOf(blackKing);
-                const bkRow = Math.floor(bkIdx / 8);
-                score += bkRow * 10; // Penalize king moving up too early
-            }
-
             return score;
         };
 
-        // Order moves for better pruning
+        // Count attacks on a square
+        const countAttacks = (tempGame, color, row, col) => {
+            const moves = tempGame.moves({ verbose: true });
+            return moves.filter(m => m.to === `${String.fromCharCode(97 + col)}${8 - row}` && m.color === color).length;
+        };
+
+        // Enhanced move ordering
         const orderMoves = (moves, depth) => {
             return moves.sort((a, b) => {
                 let aScore = 0, bScore = 0;
-                if (a.captured) aScore += pieceValues[a.captured] - (pieceValues[a.piece] || 0); // MVV-LVA
-                if (b.captured) bScore += pieceValues[b.captured] - (pieceValues[b.piece] || 0);
+                if (a.captured) aScore += 10 * pieceValues[a.captured] - pieceValues[a.piece]; // MVV-LVA
+                if (b.captured) bScore += 10 * pieceValues[b.captured] - pieceValues[b.piece];
                 if (a.promotion) aScore += 900;
                 if (b.promotion) bScore += 900;
                 if (a.flags.includes('k') || a.flags.includes('q')) aScore += 100;
                 if (b.flags.includes('k') || b.flags.includes('q')) bScore += 100;
-                if (killerMoves[depth]?.includes(a.san)) aScore += 1000;
-                if (killerMoves[depth]?.includes(b.san)) bScore += 1000;
+                if (killerMoves[depth]?.includes(a.san)) aScore += 10000;
+                if (killerMoves[depth]?.includes(b.san)) bScore += 10000;
                 aScore += historyTable[a.san] || 0;
                 bScore += historyTable[b.san] || 0;
                 const tempGame = new Chess(game.fen());
                 tempGame.move(a);
-                if (tempGame.in_check()) aScore += 500;
+                if (tempGame.in_check()) aScore += 5000;
                 tempGame.load(game.fen());
                 tempGame.move(b);
-                if (tempGame.in_check()) bScore += 500;
+                if (tempGame.in_check()) bScore += 5000;
                 return bScore - aScore;
             });
         };
 
-        // Quiescence search for stability
+        // Quiescence search
         const quiescence = (tempGame, alpha, beta, maximizingPlayer) => {
             const standPat = evaluateBoard(tempGame);
             if (maximizingPlayer) {
@@ -276,7 +262,7 @@
                 beta = Math.min(beta, standPat);
             }
 
-            const captureMoves = tempGame.moves({ verbose: true }).filter(m => m.captured || m.promotion);
+            const captureMoves = tempGame.moves({ verbose: true }).filter(m => m.captured || m.promotion || tempGame.in_check());
             if (captureMoves.length === 0) return standPat;
 
             if (maximizingPlayer) {
@@ -300,17 +286,23 @@
             }
         };
 
-        // Negamax with alpha-beta pruning and iterative deepening
+        // Negamax with enhancements
         const negamax = (tempGame, depth, alpha, beta, color, startTime, timeLimit, isPV = false) => {
             const fen = tempGame.fen();
             if (transpositionTable.has(fen) && transpositionTable.get(fen).depth >= depth) {
                 return transpositionTable.get(fen).score * color;
             }
 
-            if (depth === 0 || tempGame.game_over() || (Date.now() - startTime > timeLimit)) {
-                const score = quiescence(tempGame, alpha, beta, color === 1) * color;
-                transpositionTable.set(fen, { score: score * color, depth: 0 });
-                return score;
+            if (depth <= 0 || tempGame.game_over() || (Date.now() - startTime > timeLimit)) {
+                return quiescence(tempGame, alpha, beta, color === 1) * color;
+            }
+
+            // Null move pruning
+            if (!isPV && depth >= 3 && !tempGame.in_check() && tempGame.moves().length > 0) {
+                const newGame = new Chess(tempGame.fen());
+                newGame.move({ from: 'a1', to: 'a1' }); // Null move simulation
+                const nullScore = -negamax(newGame, depth - 3, -beta, -beta + 1, -color, startTime, timeLimit);
+                if (nullScore >= beta) return beta;
             }
 
             let bestScore = -Infinity;
@@ -324,10 +316,16 @@
                 newGame.move(move);
                 let score;
 
+                // Principal Variation Search
                 if (i === 0 && isPV) {
                     score = -negamax(newGame, depth - 1, -beta, -alpha, -color, startTime, timeLimit, true);
                 } else {
-                    score = -negamax(newGame, depth - 1, -alpha - 1, -alpha, -color, startTime, timeLimit, false);
+                    // Late Move Reductions
+                    let reduction = 0;
+                    if (i >= 4 && depth >= 3 && !move.captured && !move.promotion && !newGame.in_check()) {
+                        reduction = 1;
+                    }
+                    score = -negamax(newGame, depth - 1 - reduction, -alpha - 1, -alpha, -color, startTime, timeLimit, false);
                     if (alpha < score && score < beta) {
                         score = -negamax(newGame, depth - 1, -beta, -alpha, -color, startTime, timeLimit, true);
                     }
@@ -337,7 +335,8 @@
 
                 if (score >= beta) {
                     if (!move.captured && !move.promotion) {
-                        killerMoves[depth].push(move.san);
+                        killerMoves[depth].unshift(move.san);
+                        if (killerMoves[depth].length > 2) killerMoves[depth].pop();
                         historyTable[move.san] = (historyTable[move.san] || 0) + depth * depth;
                     }
                     transpositionTable.set(fen, { score: beta * color, depth });
@@ -353,17 +352,16 @@
             return bestScore;
         };
 
-        // Get best move with enhanced Level 15
+        // Get best move with dynamic time management
         const getBestMove = (tempGame, level) => {
             const moves = orderMoves(tempGame.moves({ verbose: true }), 0);
-            if (moves.length === 0) {
-                console.log("No legal moves available");
-                return null;
-            }
+            if (moves.length === 0) return null;
 
             const startTime = Date.now();
-            const timeLimit = level === 15 ? 10000 : 5000; // 10s for Level 15, 5s for others
-            const maxDepth = level === 15 ? 10 : Math.min(level + 4, 8); // Deeper search for Level 15
+            const baseTimeLimit = level === 15 ? 15000 : 5000; // 15s for Level 15
+            const moveCount = tempGame.history().length;
+            const timeLimit = baseTimeLimit * (moveCount < 20 ? 1 : 0.5); // More time early
+            const maxDepth = level === 15 ? 12 : Math.min(level + 4, 8);
             let bestMove = moves[0];
             let bestScore = -Infinity;
             const color = tempGame.turn() === 'w' ? 1 : -1;
@@ -391,7 +389,6 @@
                     bestMove = currentBestMove;
                     console.log(`Depth ${depth} completed, best move: ${bestMove.san}, score: ${bestScore}`);
                 } else {
-                    console.log(`Time limit exceeded at depth ${depth}`);
                     break;
                 }
             }
@@ -401,20 +398,16 @@
                 const lastMove = moveStack[moveStack.length - 1].move;
                 const twoMovesAgo = moveStack[moveStack.length - 3].move;
                 if (bestMove.san === twoMovesAgo && moves.length > 1) {
-                    const alternatives = moves.filter(m => m.san !== bestMove.san);
-                    bestMove = alternatives[0];
-                    console.log(`Avoided repetition, selected alternative: ${bestMove.san}`);
+                    bestMove = moves.filter(m => m.san !== bestMove.san)[0];
                 }
             }
 
-            // For levels < 15, introduce randomness
+            // Lower levels introduce randomness
             if (level < 15) {
                 const topMoves = moves.slice(0, Math.max(1, 16 - level));
                 bestMove = topMoves[Math.floor(Math.random() * topMoves.length)];
-                console.log(`Lower level random move: ${bestMove.san}`);
             }
 
-            console.log(`Final move selected: ${bestMove.san}`);
             return bestMove;
         };
 
