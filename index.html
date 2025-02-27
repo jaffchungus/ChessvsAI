@@ -338,18 +338,24 @@
         }
     };
 
-        window.onload = function() {
-            game = new Chess();
-            moveStack = [];
-            selectedSquare = null;
-            showNotation = false;
-            aiDifficulty = 15;
-            isAIThinking = false;
-            createBoard();
+    function updateBoard() {
+            if (!game) return;
+            const boardState = game.board();
+            for (let row = 0; row < 8; row++) {
+                for (let col = 0; col < 8; col++) {
+                    const square = document.querySelector(`[data-pos="${String.fromCharCode(97 + col)}${8 - row}"]`);
+                    if (!square) continue;
+                    const pieceDiv = square.querySelector('.piece');
+                    const notationSpan = square.querySelector('.notation');
+                    const piece = boardState[row][col];
+                    pieceDiv.textContent = piece ? pieceSymbols[piece.color === 'w' ? piece.type.toUpperCase() : piece.type] : '';
+                    notationSpan.style.display = showNotation ? 'block' : 'none';
+                }
+            }
             updateStatus();
-            if (playerSide === 'b') triggerAIMove();
-        };
+        }
 
+     
         function createBoard() {
             const board = document.getElementById('chessboard');
             board.innerHTML = '';
@@ -371,22 +377,18 @@
             updateBoard();
         }
 
-        function updateBoard() {
-            if (!game) return;
-            const boardState = game.board();
-            for (let row = 0; row < 8; row++) {
-                for (let col = 0; col < 8; col++) {
-                    const square = document.querySelector(`[data-pos="${String.fromCharCode(97 + col)}${8 - row}"]`);
-                    if (!square) continue;
-                    const pieceDiv = square.querySelector('.piece');
-                    const notationSpan = square.querySelector('.notation');
-                    const piece = boardState[row][col];
-                    pieceDiv.textContent = piece ? pieceSymbols[piece.color === 'w' ? piece.type.toUpperCase() : piece.type] : '';
-                    notationSpan.style.display = showNotation ? 'block' : 'none';
-                }
-            }
+
+        window.onload = function() {
+            game = new Chess();
+            moveStack = [];
+            selectedSquare = null;
+            showNotation = false;
+            aiDifficulty = 15;
+            isAIThinking = false;
+            createBoard();
             updateStatus();
-        }
+            if (playerSide === 'b') triggerAIMove();
+        };
 
         function handleSquareClick(e) {
             if (!game || game.game_over() || isAIThinking) return;
