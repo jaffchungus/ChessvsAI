@@ -480,45 +480,38 @@ const pst = {
         }
     };
 
-    function updateBoard() {
-            if (!game) return;
-            const boardState = game.board();
-            for (let row = 0; row < 8; row++) {
-                for (let col = 0; col < 8; col++) {
-                    const square = document.querySelector(`[data-pos="${String.fromCharCode(97 + col)}${8 - row}"]`);
-                    if (!square) continue;
-                    const pieceDiv = square.querySelector('.piece');
-                    const notationSpan = square.querySelector('.notation');
-                    const piece = boardState[row][col];
-                    pieceDiv.textContent = piece ? pieceSymbols[piece.color === 'w' ? piece.type.toUpperCase() : piece.type] : '';
-                    notationSpan.style.display = showNotation ? 'block' : 'none';
-                }
-            }
-            updateStatus();
-        }
 
      
         function createBoard() {
-            const board = document.getElementById('chessboard');
-            board.innerHTML = '';
-            const rowRange = playerSide === 'w' ? [0, 8] : [7, -1];
-            const rowStep = playerSide === 'w' ? 1 : -1;
-            const colRange = playerSide === 'w' ? [0, 8] : [7, -1];
-            const colStep = playerSide === 'w' ? 1 : -1;
-            for (let row = rowRange[0]; row !== rowRange[1]; row += rowStep) {
-                for (let col = colRange[0]; col !== colRange[1]; col += colStep) {
-                    const square = document.createElement('div');
-                    const isLight = (row + col) % 2 === 0;
-                    square.className = `square ${isLight ? 'light' : 'dark'}`;
-                    square.dataset.pos = `${String.fromCharCode(97 + col)}${8 - row}`;
-                    square.innerHTML = `<div class="piece"></div><span class="notation">${square.dataset.pos}</span>`;
-                    square.addEventListener('click', handleSquareClick);
-                    board.appendChild(square);
-                }
-            }
-            updateBoard();
+    const board = document.getElementById('chessboard');
+    console.log("Creating board..."); // Debugging line
+    board.innerHTML = '';
+    for (let row = 0; row < 8; row++) {
+        for (let col = 0; col < 8; col++) {
+            const square = document.createElement('div');
+            const isLight = (row + col) % 2 === 0;
+            square.className = `square ${isLight ? 'light' : 'dark'}`;
+            square.dataset.pos = `${String.fromCharCode(97 + col)}${8 - row}`;
+            square.innerHTML = `<div class="piece"></div><span class="notation">${square.dataset.pos}</span>`;
+            board.appendChild(square);
         }
+    }
+}
 
+function updateBoard() {
+    console.log("Updating board..."); // Debugging line
+    if (!game) return;
+    const boardState = game.board();
+    for (let row = 0; row < 8; row++) {
+        for (let col = 0; col < 8; col++) {
+            const square = document.querySelector(`[data-pos="${String.fromCharCode(97 + col)}${8 - row}"]`);
+            if (!square) continue;
+            const pieceDiv = square.querySelector('.piece');
+            const piece = boardState[row][col];
+            pieceDiv.textContent = piece ? pieceSymbols[piece.color === 'w' ? piece.type.toUpperCase() : piece.type] : '';
+        }
+    }
+}
 
         window.onload = function() {
             game = new Chess();
