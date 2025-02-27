@@ -5,27 +5,30 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Chess vs AI (Super Enhanced v6)</title>
     <style>
-        body {
-            background-color: #1e2a44;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 100vh;
-            margin: 0;
-            font-family: Arial, sans-serif;
-        }
-        .game-container {
-            text-align: center;
-            padding: 20px;
-        }
-        #chessboard {
-            display: grid;
-            grid-template-columns: repeat(8, 60px);
-            grid-template-rows: repeat(8, 60px);
-            gap: 0;
-            margin: 0 auto;
-            border: 2px solid #fff;
-        }
+body {
+    background-color: #1e2a44;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    margin: 0;
+    font-family: Arial, sans-serif;
+}
+.game-container {
+    text-align: center;
+    padding: 20px;
+    display: block; /* Ensure it’s not accidentally hidden */
+}
+#chessboard {
+    display: grid;
+    grid-template-columns: repeat(8, 60px);
+    grid-template-rows: repeat(8, 60px);
+    gap: 0;
+    margin: 0 auto;
+    border: 2px solid #fff;
+    width: 480px; /* 8 * 60px */
+    height: 480px; /* Explicit size to ensure visibility */
+}
         .square {
             width: 60px;
             height: 60px;
@@ -482,9 +485,13 @@ const pst = {
 
 
      
-        function createBoard() {
+function createBoard() {
     const board = document.getElementById('chessboard');
-    console.log("Creating board..."); // Debugging line
+    if (!board) {
+        console.error("Chessboard element not found!");
+        return;
+    }
+    console.log("Creating board...");
     board.innerHTML = '';
     for (let row = 0; row < 8; row++) {
         for (let col = 0; col < 8; col++) {
@@ -496,8 +503,8 @@ const pst = {
             board.appendChild(square);
         }
     }
+    console.log("Board created successfully");
 }
-
 function updateBoard() {
     console.log("Updating board..."); // Debugging line
     if (!game) return;
