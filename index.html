@@ -130,488 +130,485 @@
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
     <script>
-let game, selectedSquare, showNotation, aiDifficulty, isAIThinking, moveStack;
-let playerSide = 'w';
-let playerRating = 1500;
-const pieceSymbols = {
-    'P': '♙', 'R': '♖', 'N': '♘', 'B': '♗', 'Q': '♕', 'K': '♔',
-    'p': '♟', 'r': '♜', 'n': '♞', 'b': '♝', 'q': '♛', 'k': '♚'
-};
-const transpositionTable = new Map();
-const killerMoves = Array(100).fill(null).map(() => []);
-const historyTable = {};
+        let game, selectedSquare, showNotation, aiDifficulty, isAIThinking, moveStack;
+        let playerSide = 'w';
+        let playerRating = 1500;
+        const pieceSymbols = {
+            'P': '♙', 'R': '♖', 'N': '♘', 'B': '♗', 'Q': '♕', 'K': '♔',
+            'p': '♟', 'r': '♜', 'n': '♞', 'b': '♝', 'q': '♛', 'k': '♚'
+        };
+        const transpositionTable = new Map();
+        const killerMoves = Array(100).fill(null).map(() => []);
+        const historyTable = {};
 
-// Piece values
-const pieceValues = { p: 100, n: 320, b: 330, r: 500, q: 900, k: 20000 };
+        // Piece values
+        const pieceValues = { p: 100, n: 320, b: 330, r: 500, q: 900, k: 20000 };
 
-// Phase-specific PSTs (Opening, Middlegame, Endgame)
-const pst = {
-    p: [
-        [0, 0, 0, 0, 0, 0, 0, 0, 50, 50, 50, 50, 50, 50, 50, 50, 10, 10, 20, 30, 30, 20, 10, 10, 5, 5, 10, 25, 25, 10, 5, 5, 0, 0, 0, 20, 20, 0, 0, 0, 5, -5, -10, 0, 0, -10, -5, 5, 5, 10, 10, -20, -20, 10, 10, 5, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0, 70, 70, 70, 70, 70, 70, 70, 70, 30, 30, 35, 45, 45, 35, 30, 30, 15, 15, 20, 40, 40, 20, 15, 15, 10, 10, 15, 30, 30, 15, 10, 10, 10, -5, -10, 0, 0, -10, -5, 10, 10, 15, 15, -25, -25, 15, 15, 10, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0, 80, 80, 80, 80, 80, 80, 80, 80, 50, 50, 50, 50, 50, 50, 50, 50, 30, 30, 30, 30, 30, 30, 30, 30, 20, 20, 20, 20, 20, 20, 20, 20, 10, 10, 10, 10, 10, 10, 10, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-    ],
-    n: [
-        [-50, -40, -30, -30, -30, -30, -40, -50, -40, -20, 0, 0, 0, 0, -20, -40, -30, 0, 10, 15, 15, 10, 0, -30, -30, 5, 15, 20, 20, 15, 5, -30, -30, 0, 15, 20, 20, 15, 0, -30, -30, 5, 10, 15, 15, 10, 5, -30, -40, -20, 0, 5, 5, 0, -20, -40, -50, -40, -30, -30, -30, -30, -40, -50],
-        [-50, -40, -30, -30, -30, -30, -40, -50, -40, -20, 0, 0, 0, 0, -20, -40, -30, 0, 10, 15, 15, 10, 0, -30, -30, 5, 15, 20, 20, 15, 5, -30, -30, 0, 15, 20, 20, 15, 0, -30, -30, 5, 10, 15, 15, 10, 5, -30, -40, -20, 0, 5, 5, 0, -20, -40, -50, -40, -30, -30, -30, -30, -40, -50],
-        [-50, -40, -30, -30, -30, -30, -40, -50, -40, -20, 0, 0, 0, 0, -20, -40, -30, 5, 10, 15, 15, 10, 5, -30, -30, 10, 15, 20, 20, 15, 10, -30, -30, 10, 15, 20, 20, 15, 10, -30, -30, 5, 10, 15, 15, 10, 5, -30, -40, -20, 0, 0, 0, 0, -20, -40, -50, -40, -30, -30, -30, -30, -40, -50]
-    ],
-    b: [
-        [-20, -10, -10, -10, -10, -10, -10, -20, -10, 0, 0, 0, 0, 0, 0, -10, -10, 5, 5, 10, 10, 5, 5, -10, -10, 0, 10, 10, 10, 10, 0, -10, -10, 0, 10, 10, 10, 10, 0, -10, -10, 10, 10, 10, 10, 10, 10, -10, -10, 5, 0, 0, 0, 0, 5, -10, -20, -10, -10, -10, -10, -10, -10, -20],
-        [-20, -10, -10, -10, -10, -10, -10, -20, -10, 5, 5, 5, 5, 5, 5, -10, -10, 10, 10, 10, 10, 10, 10, -10, -10, 10, 15, 15, 15, 15, 10, -10, -10, 10, 15, 15, 15, 15, 10, -10, -10, 10, 10, 10, 10, 10, 10, -10, -10, 5, 5, 5, 5, 5, 5, -10, -20, -10, -10, -10, -10, -10, -10, -20],
-        [-20, -10, -10, -10, -10, -10, -10, -20, -10, 5, 5, 5, 5, 5, 5, -10, -10, 10, 10, 10, 10, 10, 10, -10, -10, 10, 15, 15, 15, 15, 10, -10, -10, 10, 15, 15, 15, 15, 10, -10, -10, 10, 10, 10, 10, 10, 10, -10, -10, 5, 5, 5, 5, 5, 5, -10, -20, -10, -10, -10, -10, -10, -10, -20]
-    ],
-    r: [
-        [0, 0, 0, 0, 0, 0, 0, 0, 5, 10, 10, 10, 10, 10, 10, 5, -5, 0, 0, 0, 0, 0, 0, -5, -5, 0, 0, 0, 0, 0, 0, -5, -5, 0, 0, 0, 0, 0, 0, -5, -5, 0, 0, 0, 0, 0, 0, -5, -5, 0, 0, 0, 0, 0, 0, -5, 0, 0, 0, 5, 5, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0, 5, 10, 10, 10, 10, 10, 10, 5, 5, 10, 10, 10, 10, 10, 10, 5, 5, 10, 10, 10, 10, 10, 10, 5, 5, 10, 10, 10, 10, 10, 10, 5, 5, 10, 10, 10, 10, 10, 10, 5, 5, 10, 10, 10, 10, 10, 10, 5, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0, 5, 10, 10, 10, 10, 10, 10, 5, 5, 10, 10, 10, 10, 10, 10, 5, 5, 10, 10, 10, 10, 10, 10, 5, 5, 10, 10, 10, 10, 10, 10, 5, 5, 10, 10, 10, 10, 10, 10, 5, 5, 10, 10, 10, 10, 10, 10, 5, 0, 0, 0, 0, 0, 0, 0, 0]
-    ],
-    q: [
-        [-20, -10, -10, -5, -5, -10, -10, -20, -10, 0, 0, 0, 0, 0, 0, -10, -10, 0, 5, 5, 5, 5, 0, -10, -5, 0, 5, 5, 5, 5, 0, -5, 0, 0, 5, 5, 5, 5, 0, -5, -10, 5, 5, 5, 5, 5, 0, -10, -10, 0, 5, 0, 0, 0, 0, -10, -20, -10, -10, -5, -5, -10, -10, -20],
-        [-20, -10, -10, -5, -5, -10, -10, -20, -10, 5, 5, 5, 5, 5, 5, -10, -10, 10, 10, 10, 10, 10, 10, -10, -5, 10, 15, 15, 15, 15, 10, -5, 0, 10, 15, 15, 15, 15, 10, -5, -10, 10, 10, 10, 10, 10, 10, -10, -10, 5, 5, 5, 5, 5, 5, -10, -20, -10, -10, -5, -5, -10, -10, -20],
-        [-20, -10, -10, -5, -5, -10, -10, -20, -10, 5, 5, 5, 5, 5, 5, -10, -10, 10, 10, 10, 10, 10, 10, -10, -5, 10, 15, 15, 15, 15, 10, -5, 0, 10, 15, 15, 15, 15, 10, -5, -10, 10, 10, 10, 10, 10, 10, -10, -10, 5, 5, 5, 5, 5, 5, -10, -20, -10, -10, -5, -5, -10, -10, -20]
-    ],
-    k: [
-        [-30, -40, -40, -50, -50, -40, -40, -30, -30, -40, -40, -50, -50, -40, -40, -30, -30, -40, -40, -50, -50, -40, -40, -30, -30, -40, -40, -50, -50, -40, -40, -30, -20, -30, -30, -40, -40, -30, -30, -20, -10, -20, -20, -20, -20, -20, -20, -10, 10, 10, -10, -10, -10, -10, 10, 10, 20, 30, 10, 0, 0, 10, 30, 20],
-        [-30, -40, -40, -50, -50, -40, -40, -30, -30, -40, -40, -50, -50, -40, -40, -30, -30, -40, -40, -50, -50, -40, -40, -30, -30, -40, -40, -50, -50, -40, -40, -30, -20, -30, -30, -40, -40, -30, -30, -20, -10, -20, -20, -20, -20, -20, -20, -10, 10, 10, -10, -10, -10, -10, 10, 10, 20, 30, 10, 0, 0, 10, 30, 20],
-        [-50, -40, -30, -20, -20, -30, -40, -50, -30, -20, -10, 0, 0, -10, -20, -30, -30, -10, 20, 30, 30, 20, -10, -30, -30, -10, 30, 40, 40, 30, -10, -30, -30, -10, 30, 40, 40, 30, -10, -30, -30, -10, 20, 30, 30, 20, -10, -30, -30, -30, 0, 0, 0, 0, -30, -30, -50, -30, -30, -30, -30, -30, -30, -50]
-    ]
-};
+        // Phase-specific PSTs (Opening, Middlegame, Endgame)
+        const pst = {
+            p: [
+                [0, 0, 0, 0, 0, 0, 0, 0, 50, 50, 50, 50, 50, 50, 50, 50, 10, 10, 20, 30, 30, 20, 10, 10, 5, 5, 10, 25, 25, 10, 5, 5, 0, 0, 0, 20, 20, 0, 0, 0, 5, -5, -10, 0, 0, -10, -5, 5, 5, 10, 10, -20, -20, 10, 10, 5, 0, 0, 0, 0, 0, 0, 0, 0],
+                [0, 0, 0, 0, 0, 0, 0, 0, 70, 70, 70, 70, 70, 70, 70, 70, 30, 30, 35, 45, 45, 35, 30, 30, 15, 15, 20, 40, 40, 20, 15, 15, 10, 10, 15, 30, 30, 15, 10, 10, 10, -5, -10, 0, 0, -10, -5, 10, 10, 15, 15, -25, -25, 15, 15, 10, 0, 0, 0, 0, 0, 0, 0, 0],
+                [0, 0, 0, 0, 0, 0, 0, 0, 80, 80, 80, 80, 80, 80, 80, 80, 50, 50, 50, 50, 50, 50, 50, 50, 30, 30, 30, 30, 30, 30, 30, 30, 20, 20, 20, 20, 20, 20, 20, 20, 10, 10, 10, 10, 10, 10, 10, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+            ],
+            n: [
+                [-50, -40, -30, -30, -30, -30, -40, -50, -40, -20, 0, 0, 0, 0, -20, -40, -30, 0, 10, 15, 15, 10, 0, -30, -30, 5, 15, 20, 20, 15, 5, -30, -30, 0, 15, 20, 20, 15, 0, -30, -30, 5, 10, 15, 15, 10, 5, -30, -40, -20, 0, 5, 5, 0, -20, -40, -50, -40, -30, -30, -30, -30, -40, -50],
+                [-50, -40, -30, -30, -30, -30, -40, -50, -40, -20, 0, 0, 0, 0, -20, -40, -30, 0, 10, 15, 15, 10, 0, -30, -30, 5, 15, 20, 20, 15, 5, -30, -30, 0, 15, 20, 20, 15, 0, -30, -30, 5, 10, 15, 15, 10, 5, -30, -40, -20, 0, 5, 5, 0, -20, -40, -50, -40, -30, -30, -30, -30, -40, -50],
+                [-50, -40, -30, -30, -30, -30, -40, -50, -40, -20, 0, 0, 0, 0, -20, -40, -30, 5, 10, 15, 15, 10, 5, -30, -30, 10, 15, 20, 20, 15, 10, -30, -30, 10, 15, 20, 20, 15, 10, -30, -30, 5, 10, 15, 15, 10, 5, -30, -40, -20, 0, 0, 0, 0, -20, -40, -50, -40, -30, -30, -30, -30, -40, -50]
+            ],
+            b: [
+                [-20, -10, -10, -10, -10, -10, -10, -20, -10, 0, 0, 0, 0, 0, 0, -10, -10, 5, 5, 10, 10, 5, 5, -10, -10, 0, 10, 10, 10, 10, 0, -10, -10, 0, 10, 10, 10, 10, 0, -10, -10, 10, 10, 10, 10, 10, 10, -10, -10, 5, 0, 0, 0, 0, 5, -10, -20, -10, -10, -10, -10, -10, -10, -20],
+                [-20, -10, -10, -10, -10, -10, -10, -20, -10, 5, 5, 5, 5, 5, 5, -10, -10, 10, 10, 10, 10, 10, 10, -10, -10, 10, 15, 15, 15, 15, 10, -10, -10, 10, 15, 15, 15, 15, 10, -10, -10, 10, 10, 10, 10, 10, 10, -10, -10, 5, 5, 5, 5, 5, 5, -10, -20, -10, -10, -10, -10, -10, -10, -20],
+                [-20, -10, -10, -10, -10, -10, -10, -20, -10, 5, 5, 5, 5, 5, 5, -10, -10, 10, 10, 10, 10, 10, 10, -10, -10, 10, 15, 15, 15, 15, 10, -10, -10, 10, 15, 15, 15, 15, 10, -10, -10, 10, 10, 10, 10, 10, 10, -10, -10, 5, 5, 5, 5, 5, 5, -10, -20, -10, -10, -10, -10, -10, -10, -20]
+            ],
+            r: [
+                [0, 0, 0, 0, 0, 0, 0, 0, 5, 10, 10, 10, 10, 10, 10, 5, -5, 0, 0, 0, 0, 0, 0, -5, -5, 0, 0, 0, 0, 0, 0, -5, -5, 0, 0, 0, 0, 0, 0, -5, -5, 0, 0, 0, 0, 0, 0, -5, -5, 0, 0, 0, 0, 0, 0, -5, 0, 0, 0, 5, 5, 0, 0, 0],
+                [0, 0, 0, 0, 0, 0, 0, 0, 5, 10, 10, 10, 10, 10, 10, 5, 5, 10, 10, 10, 10, 10, 10, 5, 5, 10, 10, 10, 10, 10, 10, 5, 5, 10, 10, 10, 10, 10, 10, 5, 5, 10, 10, 10, 10, 10, 10, 5, 5, 10, 10, 10, 10, 10, 10, 5, 0, 0, 0, 0, 0, 0, 0, 0],
+                [0, 0, 0, 0, 0, 0, 0, 0, 5, 10, 10, 10, 10, 10, 10, 5, 5, 10, 10, 10, 10, 10, 10, 5, 5, 10, 10, 10, 10, 10, 10, 5, 5, 10, 10, 10, 10, 10, 10, 5, 5, 10, 10, 10, 10, 10, 10, 5, 5, 10, 10, 10, 10, 10, 10, 5, 0, 0, 0, 0, 0, 0, 0, 0]
+            ],
+            q: [
+                [-20, -10, -10, -5, -5, -10, -10, -20, -10, 0, 0, 0, 0, 0, 0, -10, -10, 0, 5, 5, 5, 5, 0, -10, -5, 0, 5, 5, 5, 5, 0, -5, 0, 0, 5, 5, 5, 5, 0, -5, -10, 5, 5, 5, 5, 5, 0, -10, -10, 0, 5, 0, 0, 0, 0, -10, -20, -10, -10, -5, -5, -10, -10, -20],
+                [-20, -10, -10, -5, -5, -10, -10, -20, -10, 5, 5, 5, 5, 5, 5, -10, -10, 10, 10, 10, 10, 10, 10, -10, -5, 10, 15, 15, 15, 15, 10, -5, 0, 10, 15, 15, 15, 15, 10, -5, -10, 10, 10, 10, 10, 10, 10, -10, -10, 5, 5, 5, 5, 5, 5, -10, -20, -10, -10, -5, -5, -10, -10, -20],
+                [-20, -10, -10, -5, -5, -10, -10, -20, -10, 5, 5, 5, 5, 5, 5, -10, -10, 10, 10, 10, 10, 10, 10, -10, -5, 10, 15, 15, 15, 15, 10, -5, 0, 10, 15, 15, 15, 15, 10, -5, -10, 10, 10, 10, 10, 10, 10, -10, -10, 5, 5, 5, 5, 5, 5, -10, -20, -10, -10, -5, -5, -10, -10, -20]
+            ],
+            k: [
+                [-30, -40, -40, -50, -50, -40, -40, -30, -30, -40, -40, -50, -50, -40, -40, -30, -30, -40, -40, -50, -50, -40, -40, -30, -30, -40, -40, -50, -50, -40, -40, -30, -20, -30, -30, -40, -40, -30, -30, -20, -10, -20, -20, -20, -20, -20, -20, -10, 10, 10, -10, -10, -10, -10, 10, 10, 20, 30, 10, 0, 0, 10, 30, 20],
+                [-30, -40, -40, -50, -50, -40, -40, -30, -30, -40, -40, -50, -50, -40, -40, -30, -30, -40, -40, -50, -50, -40, -40, -30, -30, -40, -40, -50, -50, -40, -40, -30, -20, -30, -30, -40, -40, -30, -30, -20, -10, -20, -20, -20, -20, -20, -20, -10, 10, 10, -10, -10, -10, -10, 10, 10, 20, 30, 10, 0, 0, 10, 30, 20],
+                [-50, -40, -30, -20, -20, -30, -40, -50, -30, -20, -10, 0, 0, -10, -20, -30, -30, -10, 20, 30, 30, 20, -10, -30, -30, -10, 30, 40, 40, 30, -10, -30, -30, -10, 30, 40, 40, 30, -10, -30, -30, -10, 20, 30, 30, 20, -10, -30, -30, -30, 0, 0, 0, 0, -30, -30, -50, -30, -30, -30, -30, -30, -30, -50]
+            ]
+        };
 
-// Game phase calculation
-const getGamePhase = (material) => {
-    const total = material.w + material.b;
-    return Math.min(1, Math.max(0, (total - 4000) / 4000));
-};
+        // Game phase calculation
+        const getGamePhase = (material) => {
+            const total = material.w + material.b;
+            return Math.min(1, Math.max(0, (total - 4000) / 4000));
+        };
 
-// Enhanced evaluation function with phase blending
-const evaluateBoard = (tempGame) => {
-    if (tempGame.in_checkmate()) return tempGame.turn() === 'w' ? -200000 : 200000;
-    if (tempGame.in_draw()) return 0;
+        // Enhanced evaluation function with phase blending
+        const evaluateBoard = (tempGame) => {
+            if (tempGame.in_checkmate()) return tempGame.turn() === 'w' ? -200000 : 200000;
+            if (tempGame.in_draw()) return 0;
 
-    const board = tempGame.board();
-    let score = 0;
-    let material = { w: 0, b: 0 };
+            const board = tempGame.board();
+            let score = 0;
+            let material = { w: 0, b: 0 };
 
-    for (let row = 0; row < 8; row++) {
-        for (let col = 0; col < 8; col++) {
-            const piece = board[row][col];
-            if (piece) material[piece.color] += pieceValues[piece.type];
-        }
-    }
-    const phase = getGamePhase(material);
-
-    for (let row = 0; row < 8; row++) {
-        for (let col = 0; col < 8; col++) {
-            const piece = board[row][col];
-            if (!piece) continue;
-
-            const idx = piece.color === 'w' ? row * 8 + col : (7 - row) * 8 + (7 - col);
-            const p = piece.type.toLowerCase();
-            const openingVal = pst[p][0][idx];
-            const middleVal = pst[p][1][idx];
-            const endgameVal = pst[p][2][idx];
-            const pstVal = openingVal * (1 - phase) + endgameVal * phase;
-            score += piece.color === 'w' ? pstVal + pieceValues[p] : -(pstVal + pieceValues[p]);
-        }
-    }
-
-    const moves = tempGame.moves({ verbose: true });
-    let whiteMobility = 0, blackMobility = 0;
-    moves.forEach(move => move.color === 'w' ? whiteMobility++ : blackMobility++);
-    score += (whiteMobility - blackMobility) * (phase < 0.5 ? 10 : 5);
-
-    const whiteKing = board.flat().find(p => p && p.type === 'k' && p.color === 'w');
-    const blackKing = board.flat().find(p => p && p.type === 'k' && p.color === 'b');
-    if (whiteKing && phase < 0.5) {
-        const wkIdx = board.flat().indexOf(whiteKing);
-        const wkRow = Math.floor(wkIdx / 8);
-        score -= (wkRow - 7) * 10;
-    }
-    if (blackKing && phase < 0.5) {
-        const bkIdx = board.flat().indexOf(blackKing);
-        const bkRow = Math.floor(bkIdx / 8);
-        score += bkRow * 10;
-    }
-
-    return score;
-};
-
-// Optimized move ordering
-const orderMoves = (moves, depth) => {
-    return moves.sort((a, b) => {
-        let aScore = 0, bScore = 0;
-        const tempGameA = new Chess(game.fen());
-        tempGameA.move(a);
-        if (tempGameA.in_checkmate()) return -Infinity; // Prioritize checkmate
-        if (a.captured) aScore += pieceValues[a.captured] - (pieceValues[a.piece] || 0);
-        if (b.captured) bScore += pieceValues[b.captured] - (pieceValues[b.piece] || 0);
-        if (a.promotion) aScore += 900;
-        if (b.promotion) bScore += 900;
-        if (a.flags.includes('k') || a.flags.includes('q')) aScore += 100;
-        if (b.flags.includes('k') || b.flags.includes('q')) bScore += 100;
-        if (killerMoves[depth]?.includes(a.san)) aScore += 1000;
-        if (killerMoves[depth]?.includes(b.san)) bScore += 1000;
-        aScore += historyTable[a.san] || 0;
-        bScore += historyTable[b.san] || 0;
-        if (tempGameA.in_check()) aScore += 500;
-        const tempGameB = new Chess(game.fen());
-        tempGameB.move(b);
-        if (tempGameB.in_check()) bScore += 500;
-        return bScore - aScore;
-    });
-};
-
-// Quiescence search
-const quiescence = (tempGame, alpha, beta, maximizingPlayer) => {
-    const standPat = evaluateBoard(tempGame);
-    if (maximizingPlayer) {
-        if (standPat >= beta) return beta;
-        alpha = Math.max(alpha, standPat);
-    } else {
-        if (standPat <= alpha) return alpha;
-        beta = Math.min(beta, standPat);
-    }
-
-    const captureMoves = tempGame.moves({ verbose: true }).filter(m => m.captured || m.promotion);
-    if (captureMoves.length === 0) return standPat;
-
-    if (maximizingPlayer) {
-        for (const move of orderMoves(captureMoves, 0)) {
-            const newGame = new Chess(tempGame.fen());
-            newGame.move(move);
-            const score = quiescence(newGame, alpha, beta, false);
-            if (score >= beta) return beta;
-            alpha = Math.max(alpha, score);
-        }
-        return alpha;
-    } else {
-        for (const move of orderMoves(captureMoves, 0)) {
-            const newGame = new Chess(tempGame.fen());
-            newGame.move(move);
-            const score = quiescence(newGame, alpha, beta, true);
-            if (score <= alpha) return alpha;
-            beta = Math.min(beta, score);
-        }
-        return beta;
-    }
-};
-
-// Negamax with alpha-beta pruning
-const negamax = (tempGame, depth, alpha, beta, color, startTime, timeLimit, isPV = false) => {
-    const fen = tempGame.fen();
-    if (transpositionTable.has(fen) && transpositionTable.get(fen).depth >= depth) {
-        return transpositionTable.get(fen).score * color;
-    }
-
-    if (depth === 0 || tempGame.game_over() || (Date.now() - startTime > timeLimit)) {
-        const score = quiescence(tempGame, alpha, beta, color === 1) * color;
-        transpositionTable.set(fen, { score: score * color, depth: 0 });
-        return score;
-    }
-
-    let bestScore = -Infinity;
-    let bestMove = null;
-    const moves = orderMoves(tempGame.moves({ verbose: true }), depth);
-    if (moves.length === 0) return tempGame.in_check() ? -200000 + depth : 0;
-
-    for (let i = 0; i < moves.length; i++) {
-        const move = moves[i];
-        const newGame = new Chess(tempGame.fen());
-        newGame.move(move);
-        let score;
-
-        if (newGame.in_checkmate()) {
-            return 200000 - depth; // Immediate win
-        }
-
-        if (i === 0 && isPV) {
-            score = -negamax(newGame, depth - 1, -beta, -alpha, -color, startTime, timeLimit, true);
-        } else {
-            score = -negamax(newGame, depth - 1, -alpha - 1, -alpha, -color, startTime, timeLimit, false);
-            if (alpha < score && score < beta) {
-                score = -negamax(newGame, depth - 1, -beta, -alpha, -color, startTime, timeLimit, true);
+            // Calculate material and game phase
+            for (let row = 0; row < 8; row++) {
+                for (let col = 0; col < 8; col++) {
+                    const piece = board[row][col];
+                    if (piece) material[piece.color] += pieceValues[piece.type];
+                }
             }
-        }
+            const phase = getGamePhase(material);
 
-        if (Date.now() - startTime > timeLimit) break;
+            // Evaluate position with blended PSTs
+            for (let row = 0; row < 8; row++) {
+                for (let col = 0; col < 8; col++) {
+                    const piece = board[row][col];
+                    if (!piece) continue;
 
-        if (score >= beta) {
-            if (!move.captured && !move.promotion) {
-                killerMoves[depth].push(move.san);
-                historyTable[move.san] = (historyTable[move.san] || 0) + depth * depth;
+                    const idx = piece.color === 'w' ? row * 8 + col : (7 - row) * 8 + (7 - col);
+                    const p = piece.type.toLowerCase();
+                    const openingVal = pst[p][0][idx];
+                    const middleVal = pst[p][1][idx];
+                    const endgameVal = pst[p][2][idx];
+                    const pstVal = openingVal * (1 - phase) + endgameVal * phase;
+                    score += piece.color === 'w' ? pstVal + pieceValues[p] : -(pstVal + pieceValues[p]);
+                }
             }
-            transpositionTable.set(fen, { score: beta * color, depth });
-            return beta;
-        }
-        if (score > bestScore) {
-            bestScore = score;
-            bestMove = move;
-            alpha = Math.max(alpha, score);
-        }
-    }
-    transpositionTable.set(fen, { score: bestScore * color, depth });
-    return bestScore;
-};
 
-// Get best move with optimized speed
-const getBestMove = (tempGame, level) => {
-    const moves = orderMoves(tempGame.moves({ verbose: true }), 0);
-    if (moves.length === 0) {
-        console.log("No legal moves available");
-        return null;
-    }
+            // Mobility bonus
+            const moves = tempGame.moves({ verbose: true });
+            let whiteMobility = 0, blackMobility = 0;
+            moves.forEach(move => move.color === 'w' ? whiteMobility++ : blackMobility++);
+            score += (whiteMobility - blackMobility) * (phase < 0.5 ? 10 : 5);
 
-    const startTime = Date.now();
-    const timeLimit = 2000; // 2 seconds
-    const maxDepth = level === 15 ? 10 : Math.min(level + 4, 8); // Depth 10 for Level 15
-    let bestMove = moves[0];
-    let bestScore = -Infinity;
-    const color = tempGame.turn() === 'w' ? 1 : -1;
-
-    console.log(`Searching depth ${maxDepth}, time limit ${timeLimit}ms`);
-
-    for (let depth = 1; depth <= maxDepth; depth++) {
-        let alpha = -Infinity;
-        let beta = Infinity;
-        let currentBestMove = bestMove;
-
-        for (const move of moves) {
-            const newGame = new Chess(tempGame.fen());
-            newGame.move(move);
-            if (newGame.in_checkmate()) {
-                console.log(`Checkmate found: ${move.san}`);
-                return move; // Immediate win
+            // King safety
+            const whiteKing = board.flat().find(p => p && p.type === 'k' && p.color === 'w');
+            const blackKing = board.flat().find(p => p && p.type === 'k' && p.color === 'b');
+            if (whiteKing && phase < 0.5) {
+                const wkIdx = board.flat().indexOf(whiteKing);
+                const wkRow = Math.floor(wkIdx / 8);
+                score -= (wkRow - 7) * 10; // Penalize king moving up too early
             }
-            const score = -negamax(newGame, depth - 1, -beta, -alpha, -color, startTime, timeLimit, true);
-            if (Date.now() - startTime > timeLimit) break;
-            if (score > bestScore) {
-                bestScore = score;
-                currentBestMove = move;
-                alpha = score;
+            if (blackKing && phase < 0.5) {
+                const bkIdx = board.flat().indexOf(blackKing);
+                const bkRow = Math.floor(bkIdx / 8);
+                score += bkRow * 10; // Penalize king moving up too early
             }
-        }
 
-        if (Date.now() - startTime <= timeLimit) {
-            bestMove = currentBestMove;
-            console.log(`Depth ${depth} completed, best move: ${bestMove.san}, score: ${bestScore}`);
-        } else {
-            console.log(`Time limit exceeded at depth ${depth}`);
-            break;
-        }
-    }
+            return score;
+        };
 
-    if (moveStack.length >= 4) {
-        const lastMove = moveStack[moveStack.length - 1].move;
-        const twoMovesAgo = moveStack[moveStack.length - 3].move;
-        if (bestMove.san === twoMovesAgo && moves.length > 1) {
-            const alternatives = moves.filter(m => m.san !== bestMove.san);
-            bestMove = alternatives[0];
-            console.log(`Avoided repetition, selected alternative: ${bestMove.san}`);
-        }
-    }
+        // Order moves for better pruning
+        const orderMoves = (moves, depth) => {
+            return moves.sort((a, b) => {
+                let aScore = 0, bScore = 0;
+                if (a.captured) aScore += pieceValues[a.captured] - (pieceValues[a.piece] || 0); // MVV-LVA
+                if (b.captured) bScore += pieceValues[b.captured] - (pieceValues[b.piece] || 0);
+                if (a.promotion) aScore += 900;
+                if (b.promotion) bScore += 900;
+                if (a.flags.includes('k') || a.flags.includes('q')) aScore += 100;
+                if (b.flags.includes('k') || b.flags.includes('q')) bScore += 100;
+                if (killerMoves[depth]?.includes(a.san)) aScore += 1000;
+                if (killerMoves[depth]?.includes(b.san)) bScore += 1000;
+                aScore += historyTable[a.san] || 0;
+                bScore += historyTable[b.san] || 0;
+                const tempGame = new Chess(game.fen());
+                tempGame.move(a);
+                if (tempGame.in_check()) aScore += 500;
+                tempGame.load(game.fen());
+                tempGame.move(b);
+                if (tempGame.in_check()) bScore += 500;
+                return bScore - aScore;
+            });
+        };
 
-    if (level < 15) {
-        const topMoves = moves.slice(0, Math.max(1, 16 - level));
-        bestMove = topMoves[Math.floor(Math.random() * topMoves.length)];
-        console.log(`Lower level random move: ${bestMove.san}`);
-    }
+        // Quiescence search for stability
+        const quiescence = (tempGame, alpha, beta, maximizingPlayer) => {
+            const standPat = evaluateBoard(tempGame);
+            if (maximizingPlayer) {
+                if (standPat >= beta) return beta;
+                alpha = Math.max(alpha, standPat);
+            } else {
+                if (standPat <= alpha) return alpha;
+                beta = Math.min(beta, standPat);
+            }
 
-    console.log(`Final move selected: ${bestMove.san}`);
-    return bestMove;
-};
+            const captureMoves = tempGame.moves({ verbose: true }).filter(m => m.captured || m.promotion);
+            if (captureMoves.length === 0) return standPat;
 
-// Board creation and updates
-function createBoard() {
-    const board = document.getElementById('chessboard');
-    if (!board) {
-        console.error("Chessboard element not found!");
-        showError("Chessboard element missing!");
-        return;
-    }
-    board.innerHTML = '';
-    for (let row = 0; row < 8; row++) {
-        for (let col = 0; col < 8; col++) {
-            const square = document.createElement('div');
-            const isLight = (row + col) % 2 === 0;
-            square.className = `square ${isLight ? 'light' : 'dark'}`;
-            square.dataset.pos = `${String.fromCharCode(97 + col)}${8 - row}`;
-            square.innerHTML = `<div class="piece"></div><span class="notation">${square.dataset.pos}</span>`;
-            square.addEventListener('click', handleSquareClick);
-            board.appendChild(square);
-        }
-    }
-    updateBoard();
-}
+            if (maximizingPlayer) {
+                for (const move of orderMoves(captureMoves, 0)) {
+                    const newGame = new Chess(tempGame.fen());
+                    newGame.move(move);
+                    const score = quiescence(newGame, alpha, beta, false);
+                    if (score >= beta) return beta;
+                    alpha = Math.max(alpha, score);
+                }
+                return alpha;
+            } else {
+                for (const move of orderMoves(captureMoves, 0)) {
+                    const newGame = new Chess(tempGame.fen());
+                    newGame.move(move);
+                    const score = quiescence(newGame, alpha, beta, true);
+                    if (score <= alpha) return alpha;
+                    beta = Math.min(beta, score);
+                }
+                return beta;
+            }
+        };
 
-function updateBoard() {
-    if (!game) return;
-    const boardState = game.board();
-    for (let row = 0; row < 8; row++) {
-        for (let col = 0; col < 8; col++) {
-            const square = document.querySelector(`[data-pos="${String.fromCharCode(97 + col)}${8 - row}"]`);
-            if (!square) continue;
-            const pieceDiv = square.querySelector('.piece');
-            const piece = boardState[row][col];
-            pieceDiv.textContent = piece ? pieceSymbols[piece.color === 'w' ? piece.type.toUpperCase() : piece.type] : '';
-            square.querySelector('.notation').style.display = showNotation ? 'block' : 'none';
-        }
-    }
-    updateStatus();
-}
+        // Negamax with alpha-beta pruning and iterative deepening
+        const negamax = (tempGame, depth, alpha, beta, color, startTime, timeLimit, isPV = false) => {
+            const fen = tempGame.fen();
+            if (transpositionTable.has(fen) && transpositionTable.get(fen).depth >= depth) {
+                return transpositionTable.get(fen).score * color;
+            }
 
-// Game logic
-window.onload = function() {
-    if (typeof Chess === 'undefined') {
-        console.error("Chess.js library failed to load!");
-        showError("Failed to load Chess.js library!");
-        return;
-    }
-    game = new Chess();
-    moveStack = [];
-    selectedSquare = null;
-    showNotation = false;
-    aiDifficulty = 15;
-    isAIThinking = false;
-    createBoard();
-    if (playerSide === 'b') triggerAIMove();
-};
+            if (depth === 0 || tempGame.game_over() || (Date.now() - startTime > timeLimit)) {
+                const score = quiescence(tempGame, alpha, beta, color === 1) * color;
+                transpositionTable.set(fen, { score: score * color, depth: 0 });
+                return score;
+            }
 
-function handleSquareClick(e) {
-    if (!game || game.game_over() || isAIThinking) return;
-    const pos = e.currentTarget.dataset.pos;
-    const piece = game.get(pos);
-    if (game.turn() !== playerSide) return;
+            let bestScore = -Infinity;
+            let bestMove = null;
+            const moves = orderMoves(tempGame.moves({ verbose: true }), depth);
+            if (moves.length === 0) return tempGame.in_check() ? -200000 + depth : 0;
 
-    if (selectedSquare) {
-        const move = game.move({ from: selectedSquare, to: pos, promotion: 'q' });
-        if (move) {
-            moveStack.push({ fen: game.fen(), move: move.san });
+            for (let i = 0; i < moves.length; i++) {
+                const move = moves[i];
+                const newGame = new Chess(tempGame.fen());
+                newGame.move(move);
+                let score;
+
+                if (i === 0 && isPV) {
+                    score = -negamax(newGame, depth - 1, -beta, -alpha, -color, startTime, timeLimit, true);
+                } else {
+                    score = -negamax(newGame, depth - 1, -alpha - 1, -alpha, -color, startTime, timeLimit, false);
+                    if (alpha < score && score < beta) {
+                        score = -negamax(newGame, depth - 1, -beta, -alpha, -color, startTime, timeLimit, true);
+                    }
+                }
+
+                if (Date.now() - startTime > timeLimit) break;
+
+                if (score >= beta) {
+                    if (!move.captured && !move.promotion) {
+                        killerMoves[depth].push(move.san);
+                        historyTable[move.san] = (historyTable[move.san] || 0) + depth * depth;
+                    }
+                    transpositionTable.set(fen, { score: beta * color, depth });
+                    return beta;
+                }
+                if (score > bestScore) {
+                    bestScore = score;
+                    bestMove = move;
+                    alpha = Math.max(alpha, score);
+                }
+            }
+            transpositionTable.set(fen, { score: bestScore * color, depth });
+            return bestScore;
+        };
+
+        // Get best move with enhanced Level 15
+        const getBestMove = (tempGame, level) => {
+            const moves = orderMoves(tempGame.moves({ verbose: true }), 0);
+            if (moves.length === 0) {
+                console.log("No legal moves available");
+                return null;
+            }
+
+            const startTime = Date.now();
+            const timeLimit = level === 15 ? 10000 : 5000; // 10s for Level 15, 5s for others
+            const maxDepth = level === 15 ? 10 : Math.min(level + 4, 8); // Deeper search for Level 15
+            let bestMove = moves[0];
+            let bestScore = -Infinity;
+            const color = tempGame.turn() === 'w' ? 1 : -1;
+
+            console.log(`Searching depth ${maxDepth}, time limit ${timeLimit}ms`);
+
+            for (let depth = 1; depth <= maxDepth; depth++) {
+                let alpha = -Infinity;
+                let beta = Infinity;
+                let currentBestMove = bestMove;
+
+                for (const move of moves) {
+                    const newGame = new Chess(tempGame.fen());
+                    newGame.move(move);
+                    const score = -negamax(newGame, depth - 1, -beta, -alpha, -color, startTime, timeLimit, true);
+                    if (Date.now() - startTime > timeLimit) break;
+                    if (score > bestScore) {
+                        bestScore = score;
+                        currentBestMove = move;
+                        alpha = score;
+                    }
+                }
+
+                if (Date.now() - startTime <= timeLimit) {
+                    bestMove = currentBestMove;
+                    console.log(`Depth ${depth} completed, best move: ${bestMove.san}, score: ${bestScore}`);
+                } else {
+                    console.log(`Time limit exceeded at depth ${depth}`);
+                    break;
+                }
+            }
+
+            // Avoid repetition
+            if (moveStack.length >= 4) {
+                const lastMove = moveStack[moveStack.length - 1].move;
+                const twoMovesAgo = moveStack[moveStack.length - 3].move;
+                if (bestMove.san === twoMovesAgo && moves.length > 1) {
+                    const alternatives = moves.filter(m => m.san !== bestMove.san);
+                    bestMove = alternatives[0];
+                    console.log(`Avoided repetition, selected alternative: ${bestMove.san}`);
+                }
+            }
+
+            // For levels < 15, introduce randomness
+            if (level < 15) {
+                const topMoves = moves.slice(0, Math.max(1, 16 - level));
+                bestMove = topMoves[Math.floor(Math.random() * topMoves.length)];
+                console.log(`Lower level random move: ${bestMove.san}`);
+            }
+
+            console.log(`Final move selected: ${bestMove.san}`);
+            return bestMove;
+        };
+
+        // Board creation and updates
+        function createBoard() {
+            const board = document.getElementById('chessboard');
+            if (!board) {
+                console.error("Chessboard element not found!");
+                showError("Chessboard element missing!");
+                return;
+            }
+            board.innerHTML = '';
+            for (let row = 0; row < 8; row++) {
+                for (let col = 0; col < 8; col++) {
+                    const square = document.createElement('div');
+                    const isLight = (row + col) % 2 === 0;
+                    square.className = `square ${isLight ? 'light' : 'dark'}`;
+                    square.dataset.pos = `${String.fromCharCode(97 + col)}${8 - row}`;
+                    square.innerHTML = `<div class="piece"></div><span class="notation">${square.dataset.pos}</span>`;
+                    square.addEventListener('click', handleSquareClick);
+                    board.appendChild(square);
+                }
+            }
             updateBoard();
-            clearHighlights();
+        }
+
+        function updateBoard() {
+            if (!game) return;
+            const boardState = game.board();
+            for (let row = 0; row < 8; row++) {
+                for (let col = 0; col < 8; col++) {
+                    const square = document.querySelector(`[data-pos="${String.fromCharCode(97 + col)}${8 - row}"]`);
+                    if (!square) continue;
+                    const pieceDiv = square.querySelector('.piece');
+                    const piece = boardState[row][col];
+                    pieceDiv.textContent = piece ? pieceSymbols[piece.color === 'w' ? piece.type.toUpperCase() : piece.type] : '';
+                    square.querySelector('.notation').style.display = showNotation ? 'block' : 'none';
+                }
+            }
+            updateStatus();
+        }
+
+        // Game logic
+        window.onload = function() {
+            if (typeof Chess === 'undefined') {
+                console.error("Chess.js library failed to load!");
+                showError("Failed to load Chess.js library!");
+                return;
+            }
+            game = new Chess();
+            moveStack = [];
             selectedSquare = null;
-            checkGameOver();
-            if (!game.game_over()) triggerAIMove();
-        } else {
-            clearHighlights();
-            if (piece && piece.color === playerSide) {
+            showNotation = false;
+            aiDifficulty = 15;
+            isAIThinking = false;
+            createBoard();
+            if (playerSide === 'b') triggerAIMove();
+        };
+
+        function handleSquareClick(e) {
+            if (!game || game.game_over() || isAIThinking) return;
+            const pos = e.currentTarget.dataset.pos;
+            const piece = game.get(pos);
+            if (game.turn() !== playerSide) return;
+
+            if (selectedSquare) {
+                const move = game.move({ from: selectedSquare, to: pos, promotion: 'q' });
+                if (move) {
+                    moveStack.push({ fen: game.fen(), move: move.san });
+                    updateBoard();
+                    clearHighlights();
+                    selectedSquare = null;
+                    checkGameOver();
+                    if (!game.game_over()) triggerAIMove();
+                } else {
+                    clearHighlights();
+                    if (piece && piece.color === playerSide) {
+                        selectedSquare = pos;
+                        highlightMoves(pos);
+                    } else {
+                        selectedSquare = null;
+                    }
+                }
+            } else if (piece && piece.color === playerSide) {
                 selectedSquare = pos;
                 highlightMoves(pos);
-            } else {
-                selectedSquare = null;
             }
         }
-    } else if (piece && piece.color === playerSide) {
-        selectedSquare = pos;
-        highlightMoves(pos);
-    }
-}
 
-function highlightMoves(pos) {
-    clearHighlights();
-    const moves = game.moves({ square: pos, verbose: true });
-    moves.forEach(move => {
-        document.querySelector(`[data-pos="${move.to}"]`).classList.add('valid-move');
-    });
-    document.querySelector(`[data-pos="${pos}"]`).classList.add('selected');
-}
+        function highlightMoves(pos) {
+            clearHighlights();
+            const moves = game.moves({ square: pos, verbose: true });
+            moves.forEach(move => {
+                document.querySelector(`[data-pos="${move.to}"]`).classList.add('valid-move');
+            });
+            document.querySelector(`[data-pos="${pos}"]`).classList.add('selected');
+        }
 
-function clearHighlights() {
-    document.querySelectorAll('.square').forEach(square => {
-        square.classList.remove('selected', 'valid-move');
-    });
-}
+        function clearHighlights() {
+            document.querySelectorAll('.square').forEach(square => {
+                square.classList.remove('selected', 'valid-move');
+            });
+        }
 
-function triggerAIMove() {
-    if (!game.game_over() && game.turn() !== playerSide && !isAIThinking) {
-        isAIThinking = true;
-        setTimeout(() => {
-            const bestMove = getBestMove(game, aiDifficulty);
-            if (bestMove) {
-                game.move(bestMove);
-                moveStack.push({ fen: game.fen(), move: bestMove.san });
-                updateBoard();
-            } else {
-                showError("AI failed to find a move!");
+        function triggerAIMove() {
+            if (!game.game_over() && game.turn() !== playerSide && !isAIThinking) {
+                isAIThinking = true;
+                setTimeout(() => {
+                    const bestMove = getBestMove(game, aiDifficulty);
+                    if (bestMove) {
+                        game.move(bestMove);
+                        moveStack.push({ fen: game.fen(), move: bestMove.san });
+                        updateBoard();
+                    } else {
+                        showError("AI failed to find a move!");
+                    }
+                    isAIThinking = false;
+                    checkGameOver();
+                }, 100);
             }
+        }
+
+        function checkGameOver() {
+            if (game.in_checkmate()) {
+                const winner = game.turn() === 'w' ? 'Black' : 'White';
+                alert(`Checkmate! ${winner} wins!`);
+                const outcome = playerSide === winner.toLowerCase()[0] ? 1 : 0;
+                updateRating(outcome);
+            } else if (game.in_stalemate() || game.in_draw()) {
+                alert('Game ended in a draw!');
+                updateRating(0.5);
+            }
+        }
+
+        function updateRating(outcome) {
+            const aiRating = aiDifficulty === 15 ? 3200 : 1000 + aiDifficulty * 100;
+            const expectedScore = 1 / (1 + Math.pow(10, (aiRating - playerRating) / 400));
+            playerRating += 32 * (outcome - expectedScore);
+            playerRating = Math.round(playerRating);
+            document.getElementById('rating-display').textContent = `Your Rating: ${playerRating}`;
+        }
+
+        function newGame() {
+            game = new Chess();
+            moveStack = [];
+            selectedSquare = null;
             isAIThinking = false;
-            checkGameOver();
-        }, 100);
-    }
-}
+            transpositionTable.clear();
+            killerMoves.forEach(m => m.length = 0);
+            for (let move in historyTable) delete historyTable[move];
+            createBoard();
+            if (playerSide === 'b') triggerAIMove();
+        }
 
-function checkGameOver() {
-    if (game.in_checkmate()) {
-        const winner = game.turn() === 'w' ? 'Black' : 'White';
-        alert(`Checkmate! ${winner} wins!`);
-        const outcome = playerSide === winner.toLowerCase()[0] ? 1 : 0;
-        updateRating(outcome);
-    } else if (game.in_stalemate() || game.in_draw()) {
-        alert('Game ended in a draw!');
-        updateRating(0.5);
-    }
-}
+        function undoMove() {
+            if (moveStack.length >= 2 && !isAIThinking) {
+                moveStack.pop();
+                moveStack.pop();
+                game.load(moveStack.length ? moveStack[moveStack.length - 1].fen : 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1');
+                selectedSquare = null;
+                updateBoard();
+            }
+        }
 
-function updateRating(outcome) {
-    const aiRating = aiDifficulty === 15 ? 3200 : 1000 + aiDifficulty * 100;
-    const expectedScore = 1 / (1 + Math.pow(10, (aiRating - playerRating) / 400));
-    playerRating += 32 * (outcome - expectedScore);
-    playerRating = Math.round(playerRating);
-    document.getElementById('rating-display').textContent = `Your Rating: ${playerRating}`;
-}
+        function toggleNotation() {
+            showNotation = !showNotation;
+            updateBoard();
+        }
 
-function newGame() {
-    game = new Chess();
-    moveStack = [];
-    selectedSquare = null;
-    isAIThinking = false;
-    transpositionTable.clear();
-    killerMoves.forEach(m => m.length = 0);
-    for (let move in historyTable) delete historyTable[move];
-    createBoard();
-    if (playerSide === 'b') triggerAIMove();
-}
+        function updateStatus() {
+            const statusDiv = document.getElementById('status');
+            if (game.game_over()) {
+                statusDiv.textContent = 'Game over';
+            } else {
+                statusDiv.textContent = `${game.turn() === 'w' ? 'White' : 'Black'} to move${game.in_check() ? ' (in check)' : ''}`;
+            }
+        }
 
-function undoMove() {
-    if (moveStack.length >= 2 && !isAIThinking) {
-        moveStack.pop();
-        moveStack.pop();
-        game.load(moveStack.length ? moveStack[moveStack.length - 1].fen : 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1');
-        selectedSquare = null;
-        updateBoard();
-    }
-}
+        function setDifficulty(level) {
+            aiDifficulty = parseInt(level);
+            document.getElementById('difficulty-select').value = level;
+        }
 
-function toggleNotation() {
-    showNotation = !showNotation;
-    updateBoard();
-}
+        function setPlayerSide(side) {
+            playerSide = side;
+            newGame();
+        }
 
-function updateStatus() {
-    const statusDiv = document.getElementById('status');
-    if (game.game_over()) {
-        statusDiv.textContent = 'Game over';
-    } else {
-        statusDiv.textContent = `${game.turn() === 'w' ? 'White' : 'Black'} to move${game.in_check() ? ' (in check)' : ''}`;
-    }
-}
-
-function setDifficulty(level) {
-    aiDifficulty = parseInt(level);
-    document.getElementById('difficulty-select').value = level;
-}
-
-function setPlayerSide(side) {
-    playerSide = side;
-    newGame();
-}
-
-function showError(message) {
-    const errorDiv = document.getElementById('error-message');
-    errorDiv.textContent = message;
-    errorDiv.style.display = 'block';
-    setTimeout(() => errorDiv.style.display = 'none', 5000);
-}
+        function showError(message) {
+            const errorDiv = document.getElementById('error-message');
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+            setTimeout(() => errorDiv.style.display = 'none', 5000);
+        }
     </script>
 </body>
 </html>
