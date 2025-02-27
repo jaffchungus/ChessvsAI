@@ -193,7 +193,6 @@ const evaluateBoard = (tempGame) => {
     let score = 0;
     let material = { w: 0, b: 0 };
 
-    // Calculate material and game phase
     for (let row = 0; row < 8; row++) {
         for (let col = 0; col < 8; col++) {
             const piece = board[row][col];
@@ -202,7 +201,6 @@ const evaluateBoard = (tempGame) => {
     }
     const phase = getGamePhase(material);
 
-    // Evaluate position with blended PSTs
     for (let row = 0; row < 8; row++) {
         for (let col = 0; col < 8; col++) {
             const piece = board[row][col];
@@ -218,13 +216,11 @@ const evaluateBoard = (tempGame) => {
         }
     }
 
-    // Mobility bonus
     const moves = tempGame.moves({ verbose: true });
     let whiteMobility = 0, blackMobility = 0;
     moves.forEach(move => move.color === 'w' ? whiteMobility++ : blackMobility++);
     score += (whiteMobility - blackMobility) * (phase < 0.5 ? 10 : 5);
 
-    // King safety
     const whiteKing = board.flat().find(p => p && p.type === 'k' && p.color === 'w');
     const blackKing = board.flat().find(p => p && p.type === 'k' && p.color === 'b');
     if (whiteKing && phase < 0.5) {
@@ -241,10 +237,13 @@ const evaluateBoard = (tempGame) => {
     return score;
 };
 
-// Order moves for better pruning
+// Optimized move ordering
 const orderMoves = (moves, depth) => {
     return moves.sort((a, b) => {
         let aScore = 0, bScore = 0;
+        const tempGameA = new Chess(game.fen());
+        tempGameA.move(a);
+        if (tempGameA.in_checkmate()) return -Infinity; // Prioritize checkmate
         if (a.captured) aScore += pieceValues[a.captured] - (pieceValues[a.piece] || 0);
         if (b.captured) bScore += pieceValues[b.captured] - (pieceValues[b.piece] || 0);
         if (a.promotion) aScore += 900;
@@ -255,17 +254,15 @@ const orderMoves = (moves, depth) => {
         if (killerMoves[depth]?.includes(b.san)) bScore += 1000;
         aScore += historyTable[a.san] || 0;
         bScore += historyTable[b.san] || 0;
-        const tempGame = new Chess(game.fen());
-        tempGame.move(a);
-        if (tempGame.in_check()) aScore += 500;
-        tempGame.load(game.fen());
-        tempGame.move(b);
-        if (tempGame.in_check()) bScore += 500;
+        if (tempGameA.in_check()) aScore += 500;
+        const tempGameB = new Chess(game.fen());
+        tempGameB.move(b);
+        if (tempGameB.in_check()) bScore += 500;
         return bScore - aScore;
     });
 };
 
-// Quiescence search for stability
+// Quiescence search
 const quiescence = (tempGame, alpha, beta, maximizingPlayer) => {
     const standPat = evaluateBoard(tempGame);
     if (maximizingPlayer) {
@@ -324,6 +321,10 @@ const negamax = (tempGame, depth, alpha, beta, color, startTime, timeLimit, isPV
         newGame.move(move);
         let score;
 
+        if (newGame.in_checkmate()) {
+            return 200000 - depth; // Immediate win
+        }
+
         if (i === 0 && isPV) {
             score = -negamax(newGame, depth - 1, -beta, -alpha, -color, startTime, timeLimit, true);
         } else {
@@ -353,7 +354,7 @@ const negamax = (tempGame, depth, alpha, beta, color, startTime, timeLimit, isPV
     return bestScore;
 };
 
-// Get best move with faster response
+// Get best move with optimized speed
 const getBestMove = (tempGame, level) => {
     const moves = orderMoves(tempGame.moves({ verbose: true }), 0);
     if (moves.length === 0) {
@@ -362,8 +363,8 @@ const getBestMove = (tempGame, level) => {
     }
 
     const startTime = Date.now();
-    const timeLimit = 2000; // 2 seconds for all levels
-    const maxDepth = level === 15 ? 6 : Math.min(level + 2, 6); // Depth 6 for Level 15, lower for others
+    const timeLimit = 2000; // 2 seconds
+    const maxDepth = level === 15 ? 10 : Math.min(level + 4, 8); // Depth 10 for Level 15
     let bestMove = moves[0];
     let bestScore = -Infinity;
     const color = tempGame.turn() === 'w' ? 1 : -1;
@@ -378,6 +379,10 @@ const getBestMove = (tempGame, level) => {
         for (const move of moves) {
             const newGame = new Chess(tempGame.fen());
             newGame.move(move);
+            if (newGame.in_checkmate()) {
+                console.log(`Checkmate found: ${move.san}`);
+                return move; // Immediate win
+            }
             const score = -negamax(newGame, depth - 1, -beta, -alpha, -color, startTime, timeLimit, true);
             if (Date.now() - startTime > timeLimit) break;
             if (score > bestScore) {
@@ -396,7 +401,6 @@ const getBestMove = (tempGame, level) => {
         }
     }
 
-    // Avoid repetition
     if (moveStack.length >= 4) {
         const lastMove = moveStack[moveStack.length - 1].move;
         const twoMovesAgo = moveStack[moveStack.length - 3].move;
@@ -407,7 +411,6 @@ const getBestMove = (tempGame, level) => {
         }
     }
 
-    // Randomness for lower levels
     if (level < 15) {
         const topMoves = moves.slice(0, Math.max(1, 16 - level));
         bestMove = topMoves[Math.floor(Math.random() * topMoves.length)];
