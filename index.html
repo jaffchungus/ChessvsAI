@@ -127,153 +127,216 @@
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
     <script>
-        let game, selectedSquare, showNotation, aiDifficulty, isAIThinking, moveStack;
-        let playerSide = 'w';
-        let playerRating = 1500;
-        const transpositionTable = new Map();
-        const killerMoves = Array(100).fill(null).map(() => []); // Killer moves per depth
-        const historyTable = {}; // History heuristic for move ordering
+    let game, selectedSquare, showNotation, aiDifficulty, isAIThinking, moveStack;
+    let playerSide = 'w';
+    let playerRating = 1500;
+    const transpositionTable = new Map();
+    const killerMoves = Array(100).fill(null).map(() => []);
+    const historyTable = {};
 
-        const pieceSymbols = {
-            'P': '♙', 'R': '♖', 'N': '♘', 'B': '♗', 'Q': '♕', 'K': '♔',
-            'p': '♟', 'r': '♜', 'n': '♞', 'b': '♝', 'q': '♛', 'k': '♚'
-        };
+    // Piece values
+    const pieceValues = { p: 100, n: 320, b: 330, r: 500, q: 900, k: 20000 };
 
-        const pieceValues = { 'p': 100, 'n': 320, 'b': 330, 'r': 500, 'q': 900, 'k': 20000 };
+    // Phase-specific PSTs (Opening, Middlegame, Endgame)
+    const pst = {
+        p: [
+            // Opening
+            [
+                0, 0, 0, 0, 0, 0, 0, 0,
+                50, 50, 50, 50, 50, 50, 50, 50,
+                10, 10, 20, 30, 30, 20, 10, 10,
+                5, 5, 10, 25, 25, 10, 5, 5,
+                0, 0, 0, 20, 20, 0, 0, 0,
+                5, -5, -10, 0, 0, -10, -5, 5,
+                5, 10, 10, -20, -20, 10, 10, 5,
+                0, 0, 0, 0, 0, 0, 0, 0
+            ],
+            // Middlegame
+            [
+                0, 0, 0, 0, 0, 0, 0, 0,
+                70, 70, 70, 70, 70, 70, 70, 70,
+                30, 30, 35, 45, 45, 35, 30, 30,
+                15, 15, 20, 40, 40, 20, 15, 15,
+                10, 10, 15, 30, 30, 15, 10, 10,
+                10, -5, -10, 0, 0, -10, -5, 10,
+                10, 15, 15, -25, -25, 15, 15, 10,
+                0, 0, 0, 0, 0, 0, 0, 0
+            ],
+            // Endgame
+            [
+                0, 0, 0, 0, 0, 0, 0, 0,
+                80, 80, 80, 80, 80, 80, 80, 80,
+                50, 50, 50, 50, 50, 50, 50, 50,
+                30, 30, 30, 30, 30, 30, 30, 30,
+                20, 20, 20, 20, 20, 20, 20, 20,
+                10, 10, 10, 10, 10, 10, 10, 10,
+                0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 0, 0, 0, 0
+            ]
+        ],
+        n: [
+            // Opening
+            [
+                -50, -40, -30, -30, -30, -30, -40, -50,
+                -40, -20, 0, 0, 0, 0, -20, -40,
+                -30, 0, 10, 15, 15, 10, 0, -30,
+                -30, 5, 15, 20, 20, 15, 5, -30,
+                -30, 0, 15, 20, 20, 15, 0, -30,
+                -30, 5, 10, 15, 15, 10, 5, -30,
+                -40, -20, 0, 5, 5, 0, -20, -40,
+                -50, -40, -30, -30, -30, -30, -40, -50
+            ],
+            // Middlegame
+            [
+                -50, -40, -30, -30, -30, -30, -40, -50,
+                -40, -20, 0, 0, 0, 0, -20, -40,
+                -30, 0, 10, 15, 15, 10, 0, -30,
+                -30, 5, 15, 20, 20, 15, 5, -30,
+                -30, 0, 15, 20, 20, 15, 0, -30,
+                -30, 5, 10, 15, 15, 10, 5, -30,
+                -40, -20, 0, 5, 5, 0, -20, -40,
+                -50, -40, -30, -30, -30, -30, -40, -50
+            ],
+            // Endgame
+            [
+                -50, -40, -30, -30, -30, -30, -40, -50,
+                -40, -20, 0, 0, 0, 0, -20, -40,
+                -30, 5, 10, 15, 15, 10, 5, -30,
+                -30, 10, 15, 20, 20, 15, 10, -30,
+                -30, 10, 15, 20, 20, 15, 10, -30,
+                -30, 5, 10, 15, 15, 10, 5, -30,
+                -40, -20, 0, 0, 0, 0, -20, -40,
+                -50, -40, -30, -30, -30, -30, -40, -50
+            ]
+        ],
+        // Add PSTs for b, r, q, k similarly
+    };
 
-        // Opening PSTs
-        const pawnPSTOpening = [
-            0,  0,  0,  0,  0,  0,  0,  0,
-            50, 50, 50, 50, 50, 50, 50, 50,
-            10, 10, 20, 30, 30, 20, 10, 10,
-            5,  5, 10, 25, 25, 10,  5,  5,
-            0,  0,  0, 20, 20,  0,  0,  0,
-            5, -5,-10,  0,  0,-10, -5,  5,
-            5, 10, 10,-20,-20, 10, 10,  5,
-            0,  0,  0,  0,  0,  0,  0,  0
-        ];
+    // Game phase calculation
+    const getGamePhase = (material) => {
+        const total = material.w + material.b;
+        return Math.min(1, Math.max(0, (total - 4000) / 4000));
+    };
 
-        const knightPSTOpening = [
-            -50,-40,-30,-30,-30,-30,-40,-50,
-            -40,-20,  0,  0,  0,  0,-20,-40,
-            -30,  0, 10, 15, 15, 10,  0,-30,
-            -30,  5, 15, 20, 20, 15,  5,-30,
-            -30,  0, 15, 20, 20, 15,  0,-30,
-            -30,  5, 10, 15, 15, 10,  5,-30,
-            -40,-20,  0,  5,  5,  0,-20,-40,
-            -50,-40,-30,-30,-30,-30,-40,-50
-        ];
+    // Enhanced evaluation function with phase blending
+    const evaluateBoard = (tempGame) => {
+        if (tempGame.in_checkmate()) return tempGame.turn() === 'w' ? -200000 : 200000;
+        if (tempGame.in_draw()) return 0;
 
-        const bishopPSTOpening = [
-            -20,-10,-10,-10,-10,-10,-10,-20,
-            -10,  0,  0,  0,  0,  0,  0,-10,
-            -10,  5,  5, 10, 10,  5,  5,-10,
-            -10,  0, 10, 10, 10, 10,  0,-10,
-            -10,  0, 10, 10, 10, 10,  0,-10,
-            -10, 10, 10, 10, 10, 10, 10,-10,
-            -10,  5,  0,  0,  0,  0,  5,-10,
-            -20,-10,-10,-10,-10,-10,-10,-20
-        ];
+        const board = tempGame.board();
+        let score = 0;
+        let material = { w: 0, b: 0 };
 
-        const rookPSTOpening = [
-            0,  0,  0,  0,  0,  0,  0,  0,
-            5, 10, 10, 10, 10, 10, 10,  5,
-           -5,  0,  0,  0,  0,  0,  0, -5,
-           -5,  0,  0,  0,  0,  0,  0, -5,
-           -5,  0,  0,  0,  0,  0,  0, -5,
-           -5,  0,  0,  0,  0,  0,  0, -5,
-           -5,  0,  0,  0,  0,  0,  0, -5,
-            0,  0,  0,  5,  5,  0,  0,  0
-        ];
+        // First pass: calculate material and game phase
+        for (let row = 0; row < 8; row++) {
+            for (let col = 0; col < 8; col++) {
+                const piece = board[row][col];
+                if (piece) material[piece.color] += pieceValues[piece.type];
+            }
+        }
+        const phase = getGamePhase(material);
 
-        const queenPSTOpening = [
-            -20,-10,-10, -5, -5,-10,-10,-20,
-            -10,  0,  0,  0,  0,  0,  0,-10,
-            -10,  0,  5,  5,  5,  5,  0,-10,
-             -5,  0,  5,  5,  5,  5,  0, -5,
-              0,  0,  5,  5,  5,  5,  0, -5,
-            -10,  5,  5,  5,  5,  5,  0,-10,
-            -10,  0,  5,  0,  0,  0,  0,-10,
-            -20,-10,-10, -5, -5,-10,-10,-20
-        ];
+        // Second pass: evaluate position with blended PSTs
+        for (let row = 0; row < 8; row++) {
+            for (let col = 0; col < 8; col++) {
+                const piece = board[row][col];
+                if (!piece) continue;
 
-        const kingPSTOpening = [
-            -30,-40,-40,-50,-50,-40,-40,-30,
-            -30,-40,-40,-50,-50,-40,-40,-30,
-            -30,-40,-40,-50,-50,-40,-40,-30,
-            -30,-40,-40,-50,-50,-40,-40,-30,
-            -20,-30,-30,-40,-40,-30,-30,-20,
-            -10,-20,-20,-20,-20,-20,-20,-10,
-             10, 10,-10,-10,-10,-10, 10, 10,
-             20, 30, 10,  0,  0, 10, 30, 20
-        ];
+                const idx = piece.color === 'w' ? row * 8 + col : (7 - row) * 8 + (7 - col);
+                const p = piece.type.toLowerCase();
 
-        // Endgame PSTs
-        const pawnPSTEndgame = [
-            0,  0,  0,  0,  0,  0,  0,  0,
-            80, 80, 80, 80, 80, 80, 80, 80,
-            50, 50, 50, 50, 50, 50, 50, 50,
-            30, 30, 30, 30, 30, 30, 30, 30,
-            20, 20, 20, 20, 20, 20, 20, 20,
-            10, 10, 10, 10, 10, 10, 10, 10,
-             0,  0,  0,  0,  0,  0,  0,  0,
-             0,  0,  0,  0,  0,  0,  0,  0
-        ];
+                // Blend PST values based on game phase
+                const openingVal = pst[p][0][idx];
+                const middleVal = pst[p][1][idx];
+                const endgameVal = pst[p][2][idx];
+                const pstVal = openingVal * (1 - phase) + endgameVal * phase;
 
-        const knightPSTEndgame = [
-            -50,-40,-30,-30,-30,-30,-40,-50,
-            -40,-20,  0,  0,  0,  0,-20,-40,
-            -30,  5, 10, 15, 15, 10,  5,-30,
-            -30, 10, 15, 20, 20, 15, 10,-30,
-            -30, 10, 15, 20, 20, 15, 10,-30,
-            -30,  5, 10, 15, 15, 10,  5,-30,
-            -40,-20,  0,  0,  0,  0,-20,-40,
-            -50,-40,-30,-30,-30,-30,-40,-50
-        ];
+                score += piece.color === 'w' ? pstVal : -pstVal;
+            }
+        }
 
-        const bishopPSTEndgame = [
-            -20,-10,-10,-10,-10,-10,-10,-20,
-            -10,  5,  5,  5,  5,  5,  5,-10,
-            -10, 10, 10, 10, 10, 10, 10,-10,
-            -10, 10, 15, 15, 15, 15, 10,-10,
-            -10, 10, 15, 15, 15, 15, 10,-10,
-            -10, 10, 10, 10, 10, 10, 10,-10,
-            -10,  5,  5,  5,  5,  5,  5,-10,
-            -20,-10,-10,-10,-10,-10,-10,-20
-        ];
+        // Mobility bonus
+        const moves = tempGame.moves({ verbose: true });
+        let whiteMobility = 0, blackMobility = 0;
+        moves.forEach(move => move.color === 'w' ? whiteMobility++ : blackMobility++);
+        score += (whiteMobility - blackMobility) * (phase < 0.5 ? 10 : 5);
 
-        const rookPSTEndgame = [
-            0,  0,  0,  0,  0,  0,  0,  0,
-            5, 10, 10, 10, 10, 10, 10,  5,
-            5, 10, 10, 10, 10, 10, 10,  5,
-            5, 10, 10, 10, 10, 10, 10,  5,
-            5, 10, 10, 10, 10, 10, 10,  5,
-            5, 10, 10, 10, 10, 10, 10,  5,
-            5, 10, 10, 10, 10, 10, 10,  5,
-            0,  0,  0,  0,  0,  0,  0,  0
-        ];
+        return score;
+    };
 
-        const queenPSTEndgame = [
-            -20,-10,-10, -5, -5,-10,-10,-20,
-            -10,  5,  5,  5,  5,  5,  5,-10,
-            -10, 10, 10, 10, 10, 10, 10,-10,
-             -5, 10, 15, 15, 15, 15, 10, -5,
-              0, 10, 15, 15, 15, 15, 10, -5,
-            -10, 10, 10, 10, 10, 10, 10,-10,
-            -10,  5,  5,  5,  5,  5,  5,-10,
-            -20,-10,-10, -5, -5,-10,-10,-20
-        ];
+    // Minimax with alpha-beta pruning
+    const minimax = (tempGame, depth, alpha, beta, maximizingPlayer, startTime, timeLimit) => {
+        if (depth === 0 || tempGame.game_over() || (Date.now() - startTime > timeLimit)) {
+            return evaluateBoard(tempGame);
+        }
 
-        const kingPSTEndgame = [
-            -50,-40,-30,-20,-20,-30,-40,-50,
-            -30,-20,-10,  0,  0,-10,-20,-30,
-            -30,-10, 20, 30, 30, 20,-10,-30,
-            -30,-10, 30, 40, 40, 30,-10,-30,
-            -30,-10, 30, 40, 40, 30,-10,-30,
-            -30,-10, 20, 30, 30, 20,-10,-30,
-            -30,-30,  0,  0,  0,  0,-30,-30,
-            -50,-30,-30,-30,-30,-30,-30,-50
-        ];
+        const moves = tempGame.moves({ verbose: true });
+        if (maximizingPlayer) {
+            let maxEval = -Infinity;
+            for (const move of moves) {
+                const newGame = new Chess(tempGame.fen());
+                newGame.move(move);
+                const eval = minimax(newGame, depth - 1, alpha, beta, false, startTime, timeLimit);
+                maxEval = Math.max(maxEval, eval);
+                alpha = Math.max(alpha, eval);
+                if (beta <= alpha) break;
+            }
+            return maxEval;
+        } else {
+            let minEval = Infinity;
+            for (const move of moves) {
+                const newGame = new Chess(tempGame.fen());
+                newGame.move(move);
+                const eval = minimax(newGame, depth - 1, alpha, beta, true, startTime, timeLimit);
+                minEval = Math.min(minEval, eval);
+                beta = Math.min(beta, eval);
+                if (beta <= alpha) break;
+            }
+            return minEval;
+        }
+    };
+
+    // Get the best move using minimax
+    const getBestMove = (tempGame, level) => {
+        const moves = tempGame.moves({ verbose: true });
+        if (moves.length === 0) return null;
+
+        const startTime = Date.now();
+        const timeLimit = 5000; // 5 seconds for level 15
+        const maxDepth = level === 15 ? 6 : Math.min(level + 2, 6);
+
+        let bestMove = moves[0];
+        let bestScore = -Infinity;
+
+        for (const move of moves) {
+            const newGame = new Chess(tempGame.fen());
+            newGame.move(move);
+            const score = minimax(newGame, maxDepth - 1, -Infinity, Infinity, false, startTime, timeLimit);
+            if (score > bestScore) {
+                bestScore = score;
+                bestMove = move;
+            }
+        }
+
+        return bestMove;
+    };
+
+    // Trigger AI move
+    const triggerAIMove = () => {
+        if (!game.game_over() && game.turn() !== playerSide && !isAIThinking) {
+            isAIThinking = true;
+            setTimeout(() => {
+                const bestMove = getBestMove(game, aiDifficulty);
+                if (bestMove) {
+                    game.move(bestMove);
+                    moveStack.push({ fen: game.fen(), move: bestMove.san });
+                    updateBoard();
+                }
+                isAIThinking = false;
+                checkGameOver();
+            }, 100);
+        }
+    };
 
         window.onload = function() {
             game = new Chess();
