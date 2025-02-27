@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Chess vs AI (Super Enhanced v6)</title>
     <style>
+        /* Your original CSS unchanged */
         body {
             background-color: #1e2a44;
             display: flex;
@@ -17,7 +18,7 @@
         .game-container {
             text-align: center;
             padding: 20px;
-            display: block; /* Ensure visibility */
+            display: block;
         }
         #chessboard {
             display: grid;
@@ -26,8 +27,8 @@
             gap: 0;
             margin: 0 auto;
             border: 2px solid #fff;
-            width: 480px; /* Explicit size */
-            height: 480px; /* Explicit size */
+            width: 480px;
+            height: 480px;
         }
         .square {
             width: 60px;
@@ -129,7 +130,7 @@
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
-<script>
+    <script>
         let game, selectedSquare, showNotation, aiDifficulty, isAIThinking, moveStack;
         let playerSide = 'w';
         let playerRating = 1500;
@@ -144,9 +145,41 @@
         // Piece values
         const pieceValues = { p: 100, n: 320, b: 330, r: 500, q: 900, k: 20000 };
 
-        // Enhanced PSTs (same as before, but could be tuned further if needed)
-        const pst = {/* Same as original */};
+        // PSTs (unchanged from original for brevity, but could be tuned)
+        const pst = {
+            p: [
+                [0, 0, 0, 0, 0, 0, 0, 0, 50, 50, 50, 50, 50, 50, 50, 50, 10, 10, 20, 30, 30, 20, 10, 10, 5, 5, 10, 25, 25, 10, 5, 5, 0, 0, 0, 20, 20, 0, 0, 0, 5, -5, -10, 0, 0, -10, -5, 5, 5, 10, 10, -20, -20, 10, 10, 5, 0, 0, 0, 0, 0, 0, 0, 0],
+                [0, 0, 0, 0, 0, 0, 0, 0, 70, 70, 70, 70, 70, 70, 70, 70, 30, 30, 35, 45, 45, 35, 30, 30, 15, 15, 20, 40, 40, 20, 15, 15, 10, 10, 15, 30, 30, 15, 10, 10, 10, -5, -10, 0, 0, -10, -5, 10, 10, 15, 15, -25, -25, 15, 15, 10, 0, 0, 0, 0, 0, 0, 0, 0],
+                [0, 0, 0, 0, 0, 0, 0, 0, 80, 80, 80, 80, 80, 80, 80, 80, 50, 50, 50, 50, 50, 50, 50, 50, 30, 30, 30, 30, 30, 30, 30, 30, 20, 20, 20, 20, 20, 20, 20, 20, 10, 10, 10, 10, 10, 10, 10, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+            ],
+            n: [
+                [-50, -40, -30, -30, -30, -30, -40, -50, -40, -20, 0, 0, 0, 0, -20, -40, -30, 0, 10, 15, 15, 10, 0, -30, -30, 5, 15, 20, 20, 15, 5, -30, -30, 0, 15, 20, 20, 15, 0, -30, -30, 5, 10, 15, 15, 10, 5, -30, -40, -20, 0, 5, 5, 0, -20, -40, -50, -40, -30, -30, -30, -30, -40, -50],
+                [-50, -40, -30, -30, -30, -30, -40, -50, -40, -20, 0, 0, 0, 0, -20, -40, -30, 0, 10, 15, 15, 10, 0, -30, -30, 5, 15, 20, 20, 15, 5, -30, -30, 0, 15, 20, 20, 15, 0, -30, -30, 5, 10, 15, 15, 10, 5, -30, -40, -20, 0, 5, 5, 0, -20, -40, -50, -40, -30, -30, -30, -30, -40, -50],
+                [-50, -40, -30, -30, -30, -30, -40, -50, -40, -20, 0, 0, 0, 0, -20, -40, -30, 5, 10, 15, 15, 10, 5, -30, -30, 10, 15, 20, 20, 15, 10, -30, -30, 10, 15, 20, 20, 15, 10, -30, -30, 5, 10, 15, 15, 10, 5, -30, -40, -20, 0, 0, 0, 0, -20, -40, -50, -40, -30, -30, -30, -30, -40, -50]
+            ],
+            b: [
+                [-20, -10, -10, -10, -10, -10, -10, -20, -10, 0, 0, 0, 0, 0, 0, -10, -10, 5, 5, 10, 10, 5, 5, -10, -10, 0, 10, 10, 10, 10, 0, -10, -10, 0, 10, 10, 10, 10, 0, -10, -10, 10, 10, 10, 10, 10, 10, -10, -10, 5, 0, 0, 0, 0, 5, -10, -20, -10, -10, -10, -10, -10, -10, -20],
+                [-20, -10, -10, -10, -10, -10, -10, -20, -10, 5, 5, 5, 5, 5, 5, -10, -10, 10, 10, 10, 10, 10, 10, -10, -10, 10, 15, 15, 15, 15, 10, -10, -10, 10, 15, 15, 15, 15, 10, -10, -10, 10, 10, 10, 10, 10, 10, -10, -10, 5, 5, 5, 5, 5, 5, -10, -20, -10, -10, -10, -10, -10, -10, -20],
+                [-20, -10, -10, -10, -10, -10, -10, -20, -10, 5, 5, 5, 5, 5, 5, -10, -10, 10, 10, 10, 10, 10, 10, -10, -10, 10, 15, 15, 15, 15, 10, -10, -10, 10, 15, 15, 15, 15, 10, -10, -10, 10, 10, 10, 10, 10, 10, -10, -10, 5, 5, 5, 5, 5, 5, -10, -20, -10, -10, -10, -10, -10, -10, -20]
+            ],
+            r: [
+                [0, 0, 0, 0, 0, 0, 0, 0, 5, 10, 10, 10, 10, 10, 10, 5, -5, 0, 0, 0, 0, 0, 0, -5, -5, 0, 0, 0, 0, 0, 0, -5, -5, 0, 0, 0, 0, 0, 0, -5, -5, 0, 0, 0, 0, 0, 0, -5, -5, 0, 0, 0, 0, 0, 0, -5, 0, 0, 0, 5, 5, 0, 0, 0],
+                [0, 0, 0, 0, 0, 0, 0, 0, 5, 10, 10, 10, 10, 10, 10, 5, 5, 10, 10, 10, 10, 10, 10, 5, 5, 10, 10, 10, 10, 10, 10, 5, 5, 10, 10, 10, 10, 10, 10, 5, 5, 10, 10, 10, 10, 10, 10, 5, 5, 10, 10, 10, 10, 10, 10, 5, 0, 0, 0, 0, 0, 0, 0, 0],
+                [0, 0, 0, 0, 0, 0, 0, 0, 5, 10, 10, 10, 10, 10, 10, 5, 5, 10, 10, 10, 10, 10, 10, 5, 5, 10, 10, 10, 10, 10, 10, 5, 5, 10, 10, 10, 10, 10, 10, 5, 5, 10, 10, 10, 10, 10, 10, 5, 5, 10, 10, 10, 10, 10, 10, 5, 0, 0, 0, 0, 0, 0, 0, 0]
+            ],
+            q: [
+                [-20, -10, -10, -5, -5, -10, -10, -20, -10, 0, 0, 0, 0, 0, 0, -10, -10, 0, 5, 5, 5, 5, 0, -10, -5, 0, 5, 5, 5, 5, 0, -5, 0, 0, 5, 5, 5, 5, 0, -5, -10, 5, 5, 5, 5, 5, 0, -10, -10, 0, 5, 0, 0, 0, 0, -10, -20, -10, -10, -5, -5, -10, -10, -20],
+                [-20, -10, -10, -5, -5, -10, -10, -20, -10, 5, 5, 5, 5, 5, 5, -10, -10, 10, 10, 10, 10, 10, 10, -10, -5, 10, 15, 15, 15, 15, 10, -5, 0, 10, 15, 15, 15, 15, 10, -5, -10, 10, 10, 10, 10, 10, 10, -10, -10, 5, 5, 5, 5, 5, 5, -10, -20, -10, -10, -5, -5, -10, -10, -20],
+                [-20, -10, -10, -5, -5, -10, -10, -20, -10, 5, 5, 5, 5, 5, 5, -10, -10, 10, 10, 10, 10, 10, 10, -10, -5, 10, 15, 15, 15, 15, 10, -5, 0, 10, 15, 15, 15, 15, 10, -5, -10, 10, 10, 10, 10, 10, 10, -10, -10, 5, 5, 5, 5, 5, 5, -10, -20, -10, -10, -5, -5, -10, -10, -20]
+            ],
+            k: [
+                [-30, -40, -40, -50, -50, -40, -40, -30, -30, -40, -40, -50, -50, -40, -40, -30, -30, -40, -40, -50, -50, -40, -40, -30, -30, -40, -40, -50, -50, -40, -40, -30, -20, -30, -30, -40, -40, -30, -30, -20, -10, -20, -20, -20, -20, -20, -20, -10, 10, 10, -10, -10, -10, -10, 10, 10, 20, 30, 10, 0, 0, 10, 30, 20],
+                [-30, -40, -40, -50, -50, -40, -40, -30, -30, -40, -40, -50, -50, -40, -40, -30, -30, -40, -40, -50, -50, -40, -40, -30, -30, -40, -40, -50, -50, -40, -40, -30, -20, -30, -30, -40, -40, -30, -30, -20, -10, -20, -20, -20, -20, -20, -20, -10, 10, 10, -10, -10, -10, -10, 10, 10, 20, 30, 10, 0, 0, 10, 30, 20],
+                [-50, -40, -30, -20, -20, -30, -40, -50, -30, -20, -10, 0, 0, -10, -20, -30, -30, -10, 20, 30, 30, 20, -10, -30, -30, -10, 30, 40, 40, 30, -10, -30, -30, -10, 30, 40, 40, 30, -10, -30, -30, -10, 20, 30, 30, 20, -10, -30, -30, -30, 0, 0, 0, 0, -30, -30, -50, -30, -30, -30, -30, -30, -30, -50]
+            ]
+        };
 
+        // Game phase calculation
         const getGamePhase = (material) => {
             const total = material.w + material.b;
             return Math.min(1, Math.max(0, (total - 4000) / 4000));
@@ -186,7 +219,7 @@
                     const pstVal = (1 - phase) * openingVal + phase * endgameVal;
                     score += piece.color === 'w' ? pstVal + pieceValues[p] : -(pstVal + pieceValues[p]);
 
-                    // Pawn structure (doubled, isolated, passed)
+                    // Pawn structure
                     if (p === 'p') {
                         const file = col;
                         let doubled = false, isolated = true, passed = true;
@@ -227,11 +260,11 @@
             return moves.filter(m => m.to === `${String.fromCharCode(97 + col)}${8 - row}` && m.color === color).length;
         };
 
-        // Enhanced move ordering
+        // Move ordering
         const orderMoves = (moves, depth) => {
             return moves.sort((a, b) => {
                 let aScore = 0, bScore = 0;
-                if (a.captured) aScore += 10 * pieceValues[a.captured] - pieceValues[a.piece]; // MVV-LVA
+                if (a.captured) aScore += 10 * pieceValues[a.captured] - pieceValues[a.piece];
                 if (b.captured) bScore += 10 * pieceValues[b.captured] - pieceValues[b.piece];
                 if (a.promotion) aScore += 900;
                 if (b.promotion) bScore += 900;
@@ -286,7 +319,7 @@
             }
         };
 
-        // Negamax with enhancements
+        // Negamax with alpha-beta pruning and LMR
         const negamax = (tempGame, depth, alpha, beta, color, startTime, timeLimit, isPV = false) => {
             const fen = tempGame.fen();
             if (transpositionTable.has(fen) && transpositionTable.get(fen).depth >= depth) {
@@ -294,15 +327,9 @@
             }
 
             if (depth <= 0 || tempGame.game_over() || (Date.now() - startTime > timeLimit)) {
-                return quiescence(tempGame, alpha, beta, color === 1) * color;
-            }
-
-            // Null move pruning
-            if (!isPV && depth >= 3 && !tempGame.in_check() && tempGame.moves().length > 0) {
-                const newGame = new Chess(tempGame.fen());
-                newGame.move({ from: 'a1', to: 'a1' }); // Null move simulation
-                const nullScore = -negamax(newGame, depth - 3, -beta, -beta + 1, -color, startTime, timeLimit);
-                if (nullScore >= beta) return beta;
+                const score = quiescence(tempGame, alpha, beta, color === 1) * color;
+                transpositionTable.set(fen, { score: score * color, depth: 0 });
+                return score;
             }
 
             let bestScore = -Infinity;
@@ -316,7 +343,6 @@
                 newGame.move(move);
                 let score;
 
-                // Principal Variation Search
                 if (i === 0 && isPV) {
                     score = -negamax(newGame, depth - 1, -beta, -alpha, -color, startTime, timeLimit, true);
                 } else {
@@ -331,7 +357,10 @@
                     }
                 }
 
-                if (Date.now() - startTime > timeLimit) break;
+                if (Date.now() - startTime > timeLimit) {
+                    console.log(`Time limit exceeded at depth ${depth}, move ${i}`);
+                    break;
+                }
 
                 if (score >= beta) {
                     if (!move.captured && !move.promotion) {
@@ -352,21 +381,23 @@
             return bestScore;
         };
 
-        // Get best move with dynamic time management
+        // Get best move with debugging
         const getBestMove = (tempGame, level) => {
             const moves = orderMoves(tempGame.moves({ verbose: true }), 0);
-            if (moves.length === 0) return null;
+            if (moves.length === 0) {
+                console.log("No legal moves available");
+                showError("No legal moves available!");
+                return null;
+            }
 
             const startTime = Date.now();
-            const baseTimeLimit = level === 15 ? 15000 : 5000; // 15s for Level 15
-            const moveCount = tempGame.history().length;
-            const timeLimit = baseTimeLimit * (moveCount < 20 ? 1 : 0.5); // More time early
-            const maxDepth = level === 15 ? 12 : Math.min(level + 4, 8);
+            const timeLimit = level === 15 ? 10000 : 5000; // 10s for Level 15, 5s for others
+            const maxDepth = level === 15 ? 10 : Math.min(level + 4, 8); // Reduced from 12 for stability
             let bestMove = moves[0];
             let bestScore = -Infinity;
             const color = tempGame.turn() === 'w' ? 1 : -1;
 
-            console.log(`Searching depth ${maxDepth}, time limit ${timeLimit}ms`);
+            console.log(`Starting search: depth ${maxDepth}, time limit ${timeLimit}ms, moves: ${moves.length}`);
 
             for (let depth = 1; depth <= maxDepth; depth++) {
                 let alpha = -Infinity;
@@ -377,7 +408,10 @@
                     const newGame = new Chess(tempGame.fen());
                     newGame.move(move);
                     const score = -negamax(newGame, depth - 1, -beta, -alpha, -color, startTime, timeLimit, true);
-                    if (Date.now() - startTime > timeLimit) break;
+                    if (Date.now() - startTime > timeLimit) {
+                        console.log(`Time limit hit at depth ${depth}`);
+                        break;
+                    }
                     if (score > bestScore) {
                         bestScore = score;
                         currentBestMove = move;
@@ -399,6 +433,7 @@
                 const twoMovesAgo = moveStack[moveStack.length - 3].move;
                 if (bestMove.san === twoMovesAgo && moves.length > 1) {
                     bestMove = moves.filter(m => m.san !== bestMove.san)[0];
+                    console.log(`Avoided repetition, selected: ${bestMove.san}`);
                 }
             }
 
@@ -406,8 +441,10 @@
             if (level < 15) {
                 const topMoves = moves.slice(0, Math.max(1, 16 - level));
                 bestMove = topMoves[Math.floor(Math.random() * topMoves.length)];
+                console.log(`Random move for level ${level}: ${bestMove.san}`);
             }
 
+            console.log(`Final move: ${bestMove.san}`);
             return bestMove;
         };
 
@@ -515,13 +552,16 @@
         function triggerAIMove() {
             if (!game.game_over() && game.turn() !== playerSide && !isAIThinking) {
                 isAIThinking = true;
+                console.log("AI is thinking...");
                 setTimeout(() => {
                     const bestMove = getBestMove(game, aiDifficulty);
                     if (bestMove) {
                         game.move(bestMove);
                         moveStack.push({ fen: game.fen(), move: bestMove.san });
                         updateBoard();
+                        console.log(`AI moved: ${bestMove.san}`);
                     } else {
+                        console.error("AI failed to find a move!");
                         showError("AI failed to find a move!");
                     }
                     isAIThinking = false;
